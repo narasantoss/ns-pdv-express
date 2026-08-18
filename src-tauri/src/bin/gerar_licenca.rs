@@ -6,8 +6,8 @@
 //   cargo run --bin gerar_licenca -- NS-XXXX-XXXX-XXXX
 //
 // O HWID vem da tela de Ativação de Licença do cliente (TelaAtivacaoLicenca.jsx,
-// botão "Copiar HWID"). A chave impressa é o que o cliente cola no campo
-// "Chave de Ativação (RSA)" daquela tela.
+// link discreto de suporte no rodapé). A chave impressa é o que o cliente cola
+// no campo "Chave de Licença Serial" daquela tela.
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use rsa::pkcs8::DecodePrivateKey;
 use rsa::{Pkcs1v15Sign, RsaPrivateKey};

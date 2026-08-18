@@ -16,7 +16,7 @@
     "allow-write-database-file",
     "allow-get-local-ip",
     "allow-obter-hwid-maquina",
-    "allow-validar-e-ativar-licenca",
+    "allow-ativar-serial",
     "allow-verificar-status-licenca"
   ]
 }

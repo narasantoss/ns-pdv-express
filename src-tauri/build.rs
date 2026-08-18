@@ -6,7 +6,7 @@ fn main() {
         "write_database_file",
         "get_local_ip",
         "obter_hwid_maquina",
-        "validar_e_ativar_licenca",
+        "ativar_serial",
         "verificar_status_licenca",
       ]),
     ),

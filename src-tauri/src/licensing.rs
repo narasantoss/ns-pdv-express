@@ -3,10 +3,10 @@
 // Fluxo: `obter_hwid_maquina` deriva um identificador único e estável desta
 // máquina; o cliente envia esse HWID ao suporte da NS Sistemas, que assina o
 // HWID com a chave privada RSA (offline, fora deste app — ver
-// `src/bin/gerar_licenca.rs`) e devolve a "Chave de Ativação". O app valida
-// essa assinatura offline com a chave pública embutida no binário
-// (`validar_e_ativar_licenca`) — nunca precisa de internet/servidor de
-// licenças. `verificar_status_licenca` faz a checagem rápida no boot.
+// `src/bin/gerar_licenca.rs`) e devolve a "Chave de Licença Serial". O app
+// valida essa assinatura offline com a chave pública embutida no binário
+// (`ativar_serial`) — nunca precisa de internet/servidor de licenças.
+// `verificar_status_licenca` faz a checagem rápida no boot.
 //
 // O resultado da ativação é persistido em dois lugares, de propósito:
 //   - `licenca.json` no diretório de configuração do app (gravado por este
@@ -158,27 +158,32 @@ fn verify_license_key(chave: &str, hwid: &str) -> Result<(), String> {
         .map_err(|_| "Chave de ativação não corresponde a este computador.".to_string())
 }
 
-/// Valida a Chave de Ativação (assinatura RSA sobre o HWID informado) contra
-/// a chave pública embutida, 100% offline. Se válida, persiste o marcador
+/// Ativação por Chave de Licença Serial (tela de ativação): recebe só o
+/// serial colado pelo operador, deriva o HWID desta máquina internamente
+/// (nunca confia em um HWID vindo do lado JS) e valida a assinatura RSA do
+/// serial contra esse HWID, 100% offline. Se válida, persiste o marcador
 /// local de licença ativa (ver `LicenseRecord`) usado por
-/// `verificar_status_licenca` no próximo boot. A gravação "oficial" na
-/// tabela `licenca_local` (SQLite) é feita pelo lado JS logo em seguida, via
+/// `verificar_status_licenca` no próximo boot, e devolve o HWID usado para
+/// que o lado JS grave a linha "oficial" em `licenca_local` (SQLite) via
 /// `licencaLocalRepo.activate` — ver `TelaAtivacaoLicenca.jsx`.
 #[tauri::command]
-pub fn validar_e_ativar_licenca(app: tauri::AppHandle, chave: String, hwid: String) -> Result<bool, String> {
-    verify_license_key(&chave, &hwid)?;
+pub fn ativar_serial(app: tauri::AppHandle, serial: String) -> Result<String, String> {
+    let seed = machine_seed(&app)?;
+    let hwid = format_hwid(&seed);
+
+    verify_license_key(&serial, &hwid)?;
 
     write_license_record(
         &app,
         &LicenseRecord {
             status: "ATIVADO".to_string(),
-            hwid_maquina: hwid,
-            chave_rsa: chave,
+            hwid_maquina: hwid.clone(),
+            chave_rsa: serial,
             data_ativacao: now_iso_seconds(),
         },
     )?;
 
-    Ok(true)
+    Ok(hwid)
 }
 
 /// Checagem rápida no boot — lê só o marcador local (arquivo), sem depender

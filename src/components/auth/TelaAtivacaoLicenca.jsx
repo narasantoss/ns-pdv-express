@@ -1,27 +1,30 @@
 import { useEffect, useState } from 'react'
-import { ShieldCheck, Copy, Check, AlertTriangle, Mail, KeyRound, Loader2 } from 'lucide-react'
+import { ShieldCheck, CheckCircle2, AlertTriangle, Mail, KeyRound, Loader2, LifeBuoy, Copy, Check } from 'lucide-react'
 import clsx from 'clsx'
 import HeaderLogo from '../common/HeaderLogo'
 import { useStoreSettings } from '../../context/StoreSettingsContext'
-import { obterHwidMaquina, ativarLicenca } from '../../services/licensing'
+import { obterHwidMaquina, ativarSerial } from '../../services/licensing'
 
 const SUPPORT_EMAIL = 'nssistemastech@gmail.com'
 
 /**
  * Tela de Ativação de Licença (Etapa 5) — bloqueia o boot do app enquanto a
  * licença local não estiver ativa (ver `onActivated`, chamado por App.jsx).
- * O operador copia o HWID exibido aqui e envia ao suporte da NS Sistemas;
- * o suporte devolve a Chave de Ativação (RSA), assinada offline para este
- * HWID específico (ver src-tauri/src/licensing.rs).
+ * O operador cola a Chave de Licença Serial recebida do suporte da NS
+ * Sistemas num único campo; o HWID desta máquina (necessário só quando o
+ * suporte ainda não gerou a chave) fica atrás do link discreto no rodapé,
+ * fora da visão primária. A validação em si (assinatura RSA offline contra
+ * o HWID) roda no comando Rust `ativar_serial` — ver src-tauri/src/licensing.rs.
  */
 export default function TelaAtivacaoLicenca({ onActivated }) {
   const { settings } = useStoreSettings()
+  const [serial, setSerial] = useState('')
+  const [status, setStatus] = useState('idle') // idle | busy | success | error
+  const [error, setError] = useState('')
+  const [showHwid, setShowHwid] = useState(false)
   const [hwid, setHwid] = useState(null)
   const [hwidError, setHwidError] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [chave, setChave] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -51,18 +54,21 @@ export default function TelaAtivacaoLicenca({ onActivated }) {
 
   async function handleSubmit(event) {
     event.preventDefault()
-    if (!hwid || busy || !chave.trim()) return
-    setBusy(true)
+    if (status === 'busy' || !serial.trim()) return
+    setStatus('busy')
     setError('')
     try {
-      await ativarLicenca(chave, hwid)
-      onActivated?.()
+      await ativarSerial(serial)
+      setStatus('success')
+      window.setTimeout(() => onActivated?.(), 900)
     } catch (err) {
-      setError(err?.message || 'Não foi possível ativar a licença. Confira a chave e tente novamente.')
-    } finally {
-      setBusy(false)
+      setStatus('error')
+      setError(err?.message || 'Chave inválida ou já utilizada.')
     }
   }
+
+  const busy = status === 'busy'
+  const success = status === 'success'
 
   return (
     <div className="flex h-svh items-center justify-center bg-gradient-to-br from-slate-900 via-slate-950 to-black p-4">
@@ -78,90 +84,115 @@ export default function TelaAtivacaoLicenca({ onActivated }) {
               Ativação de Licença
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Este computador ainda não está licenciado. Ative para continuar usando o sistema.
+              Ative com sua Chave de Licença Serial para começar a usar o sistema.
             </p>
           </div>
         </div>
 
-        <div className="mt-6 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-6 space-y-3">
           <div>
-            <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Identificador desta máquina (HWID)
+            <label
+              htmlFor="license-key"
+              className="text-xs font-medium uppercase tracking-wide text-slate-500"
+            >
+              Chave de Licença Serial
             </label>
-            <div className="mt-1 flex items-center gap-2">
-              <div className="flex-1 truncate rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-center font-mono text-sm font-semibold tracking-wide text-slate-800">
-                {hwid ?? (hwidError ? 'Falha ao gerar o HWID' : 'Gerando…')}
-              </div>
-              <button
-                type="button"
-                onClick={copyHwid}
-                disabled={!hwid}
-                title="Copiar HWID"
-                aria-label="Copiar HWID"
-                className={clsx(
-                  'flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border transition-colors',
-                  copied
-                    ? 'border-emerald-300 bg-emerald-50 text-emerald-600'
-                    : 'border-slate-300 text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50',
-                )}
-              >
-                {copied ? <Check size={16} /> : <Copy size={16} />}
-              </button>
-            </div>
-            <p className="mt-1 text-xs text-slate-400">
-              Envie este código ao suporte para receber sua Chave de Ativação.
-            </p>
+            <input
+              id="license-key"
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              disabled={busy || success}
+              value={serial}
+              onChange={(event) => {
+                setStatus('idle')
+                setError('')
+                setSerial(event.target.value)
+              }}
+              placeholder="NSPDV-XXXX-XXXX-XXXX"
+              className={clsx(
+                'mt-1 w-full rounded-lg border bg-slate-50 px-3 py-3 text-center text-base font-mono font-semibold tracking-wide outline-none focus:ring-2 disabled:opacity-60',
+                status === 'error'
+                  ? 'border-red-400 focus:border-red-500 focus:ring-red-500/30'
+                  : status === 'success'
+                    ? 'border-emerald-400 focus:border-emerald-500 focus:ring-emerald-500/30'
+                    : 'border-slate-300 focus:border-blue-500 focus:ring-blue-500/30',
+              )}
+            />
+            {status === 'error' && (
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600">
+                <AlertTriangle size={13} className="shrink-0" />
+                {error}
+              </p>
+            )}
+            {status === 'success' && (
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+                <CheckCircle2 size={13} className="shrink-0" />
+                Licença ativada!
+              </p>
+            )}
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div>
-              <label
-                htmlFor="license-key"
-                className="text-xs font-medium uppercase tracking-wide text-slate-500"
-              >
-                Chave de Ativação (RSA)
-              </label>
-              <textarea
-                id="license-key"
-                rows={3}
-                value={chave}
-                onChange={(event) => {
-                  setError('')
-                  setChave(event.target.value)
-                }}
-                placeholder="Cole aqui a chave recebida do suporte…"
-                className={clsx(
-                  'mt-1 w-full resize-none rounded-lg border bg-slate-50 px-3 py-2.5 text-sm font-mono outline-none focus:ring-2',
-                  error
-                    ? 'border-red-400 focus:border-red-500 focus:ring-red-500/30'
-                    : 'border-slate-300 focus:border-blue-500 focus:ring-blue-500/30',
-                )}
-              />
-              {error && (
-                <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600">
-                  <AlertTriangle size={13} className="shrink-0" />
-                  {error}
-                </p>
-              )}
-            </div>
+          <button
+            type="submit"
+            disabled={busy || success || !serial.trim()}
+            className={clsx(
+              'flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white shadow-sm transition-colors disabled:cursor-not-allowed disabled:bg-slate-300',
+              success ? 'bg-emerald-600 shadow-emerald-600/20' : 'bg-blue-600 shadow-blue-600/20 hover:bg-blue-700',
+            )}
+          >
+            {busy && <Loader2 size={16} className="animate-spin" />}
+            {success && <CheckCircle2 size={16} />}
+            {!busy && !success && <KeyRound size={16} />}
+            {busy ? 'Ativando…' : success ? 'Licença ativada!' : 'Ativar Licença Vitalícia'}
+          </button>
+        </form>
 
+        <div className="mt-6 space-y-2 border-t border-slate-100 pt-4 text-xs text-slate-400">
+          <div className="flex items-center justify-center gap-1.5">
+            <Mail size={13} />
+            Suporte NS Sistemas:
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="font-medium text-blue-600 hover:text-blue-700">
+              {SUPPORT_EMAIL}
+            </a>
+          </div>
+
+          {!showHwid ? (
             <button
-              type="submit"
-              disabled={!hwid || busy || !chave.trim()}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              type="button"
+              onClick={() => setShowHwid(true)}
+              className="flex w-full items-center justify-center gap-1.5 text-slate-400 hover:text-slate-600"
             >
-              {busy ? <Loader2 size={16} className="animate-spin" /> : <KeyRound size={16} />}
-              {busy ? 'Ativando…' : 'Ativar Licença Agora'}
+              <LifeBuoy size={12} />
+              Ainda não tem uma chave? Ver identificador desta máquina (HWID)
             </button>
-          </form>
-        </div>
-
-        <div className="mt-6 flex items-center justify-center gap-1.5 border-t border-slate-100 pt-4 text-xs text-slate-400">
-          <Mail size={13} />
-          Suporte NS Sistemas:
-          <a href={`mailto:${SUPPORT_EMAIL}`} className="font-medium text-blue-600 hover:text-blue-700">
-            {SUPPORT_EMAIL}
-          </a>
+          ) : (
+            <div className="mx-auto max-w-xs">
+              <p className="text-center text-[11px] text-slate-400">
+                Envie este código ao suporte para receber sua Chave de Licença Serial.
+              </p>
+              <div className="mt-1.5 flex items-center gap-2">
+                <div className="flex-1 truncate rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-center font-mono text-xs font-semibold tracking-wide text-slate-700">
+                  {hwid ?? (hwidError ? 'Falha ao gerar o HWID' : 'Gerando…')}
+                </div>
+                <button
+                  type="button"
+                  onClick={copyHwid}
+                  disabled={!hwid}
+                  title="Copiar HWID"
+                  aria-label="Copiar HWID"
+                  className={clsx(
+                    'flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-lg border transition-colors',
+                    copied
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-600'
+                      : 'border-slate-200 text-slate-500 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50',
+                  )}
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

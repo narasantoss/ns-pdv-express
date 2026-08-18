@@ -1,5 +1,11 @@
 [package]
-name = "app"
+# Nome do pacote = nome do binário principal (ns-pdv-express.exe), gerado
+# automaticamente por `src/main.rs` — é assim que o instalador NSIS identifica
+# qual dos binários deste crate é a "aplicação principal" a empacotar/atalhar
+# na Área de Trabalho, distinguindo-o dos utilitários internos em src/bin/
+# (gerar_chaves, gerar_licenca), que nunca são incluídos no instalador.
+name = "ns-pdv-express"
+default-run = "ns-pdv-express"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]

@@ -4,7 +4,7 @@ use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod licensing;
-use licensing::{obter_hwid_maquina, validar_e_ativar_licenca, verificar_status_licenca};
+use licensing::{ativar_serial, obter_hwid_maquina, verificar_status_licenca};
 
 const DB_URL: &str = "sqlite:pdv_express.db";
 const DB_FILE_NAME: &str = "pdv_express.db";
@@ -406,7 +406,7 @@ pub fn run() {
       write_database_file,
       get_local_ip,
       obter_hwid_maquina,
-      validar_e_ativar_licenca,
+      ativar_serial,
       verificar_status_licenca
     ])
     .setup(|app| {

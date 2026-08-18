@@ -85,30 +85,40 @@ export async function obterHwidMaquina() {
 }
 
 /**
- * Valida a Chave de Ativação (RSA) contra o HWID informado e, se válida,
- * ativa a licença: persiste o marcador local rápido (Tauri: `licenca.json`
- * via Rust) e a linha em `licenca_local` (status 'ATIVADO', via
- * `licencaLocalRepo` — igual em Tauri e no fallback de navegador). Lança um
+ * Ativa a licença a partir da Chave de Licença Serial colada pelo operador
+ * (campo único da tela de ativação — ver TelaAtivacaoLicenca.jsx). O HWID
+ * desta máquina nunca é decidido pelo lado JS: dentro do Tauri, o comando
+ * Rust `ativar_serial` lê o HWID internamente e valida a assinatura RSA do
+ * serial contra ele; no fallback de navegador (`npm run dev` sem o shell
+ * Tauri), o HWID vem de `browserHwid()` e a verificação roda via
+ * `SubtleCrypto`. Em ambos os casos, se válido, persiste a linha "oficial"
+ * em `licenca_local` (status 'ATIVADO', via `licencaLocalRepo`). Lança um
  * erro com mensagem amigável quando a chave é inválida.
  */
-export async function ativarLicenca(chave, hwid) {
-  const chaveLimpa = chave.trim()
-  if (!chaveLimpa) throw new Error('Cole a Chave de Ativação recebida do suporte.')
+export async function ativarSerial(serial) {
+  const serialLimpo = serial.trim()
+  if (!serialLimpo) throw new Error('Informe a Chave de Licença Serial.')
 
+  let hwid
   if (isTauriRuntime()) {
     const { invoke } = await import('@tauri-apps/api/core')
-    await invoke('validar_e_ativar_licenca', { chave: chaveLimpa, hwid })
+    try {
+      hwid = await invoke('ativar_serial', { serial: serialLimpo })
+    } catch {
+      throw new Error('Chave inválida ou já utilizada.')
+    }
   } else {
+    hwid = await browserHwid()
     let valid = false
     try {
-      valid = await browserVerifyLicenseKey(chaveLimpa, hwid)
+      valid = await browserVerifyLicenseKey(serialLimpo, hwid)
     } catch {
       valid = false
     }
-    if (!valid) throw new Error('Chave de ativação não corresponde a este computador.')
+    if (!valid) throw new Error('Chave inválida ou já utilizada.')
   }
 
-  await licencaLocalRepo.activate({ chaveRsa: chaveLimpa, hwidMaquina: hwid })
+  await licencaLocalRepo.activate({ chaveRsa: serialLimpo, hwidMaquina: hwid })
 }
 
 /** `true` quando a licença local já está ativa — usada no boot (ver App.jsx). */
