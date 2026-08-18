@@ -864,7 +864,7 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
   }
 
   function openConfirmModal() {
-    if (cart.length === 0 || isBalcaoMode) return
+    if (cart.length === 0) return
     setAmountReceived('')
     setSplitPayments({ dinheiro: '', cartao: '', pix: '' })
     setReceiptOption('cupom')
@@ -1287,7 +1287,7 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
   }
 
   function pullComandaToCashier(comanda) {
-    if (!comanda || comanda.items.length === 0 || isBalcaoMode) return
+    if (!comanda || comanda.items.length === 0) return
 
     mergeCartItems(comanda.items)
     setComandas((prev) =>
@@ -1728,11 +1728,10 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
 
       if (event.key === 'F2') {
         event.preventDefault()
-        if (isBalcaoMode) {
-          openComandaHandoff()
-        } else {
-          openConfirmModal()
-        }
+        openConfirmModal()
+      } else if (event.key === 'F6' && isBalcaoMode) {
+        event.preventDefault()
+        openComandaHandoff()
       } else if (event.key === 'F3') {
         event.preventDefault()
         const digitsMatch = searchTerm.match(/\d{1,2}/)
@@ -1902,7 +1901,7 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
             </p>
             <p className="text-xs text-slate-400">
               {isBalcaoMode
-                ? 'Consulta e montagem de orçamento/comanda'
+                ? 'Terminal completo — cobrança, orçamento, clientes e delivery'
                 : `Operador: ${currentOperator?.name ?? '—'}`}
             </p>
           </div>
@@ -2193,10 +2192,10 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
             <div className="grid grid-cols-5 items-stretch gap-2">
               <ShortcutButton
                 keyLabel="F2"
-                description={isBalcaoMode ? 'Enviar' : 'Finalizar'}
-                icon={isBalcaoMode ? Send : CheckCircle2}
-                tone={isBalcaoMode ? 'sky' : 'emerald'}
-                onClick={isBalcaoMode ? openComandaHandoff : openConfirmModal}
+                description={isBalcaoMode ? 'Cobrar' : 'Finalizar'}
+                icon={CheckCircle2}
+                tone="emerald"
+                onClick={openConfirmModal}
               />
               <ShortcutButton
                 keyLabel="F7"
@@ -2230,24 +2229,26 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
 
             <button
               type="button"
-              onClick={isBalcaoMode ? openComandaHandoff : openConfirmModal}
+              onClick={openConfirmModal}
               disabled={cart.length === 0}
-              className={clsx(
-                'w-full rounded-lg py-3.5 text-sm font-semibold text-white shadow-md transition-colors disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none',
-                isBalcaoMode
-                  ? 'bg-sky-600 shadow-sky-600/20 hover:bg-sky-700'
-                  : 'bg-blue-600 shadow-blue-600/20 hover:bg-blue-700',
-              )}
+              className="w-full rounded-lg bg-blue-600 py-3.5 text-sm font-semibold text-white shadow-md shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
             >
-              {isBalcaoMode ? (
+              {isBalcaoMode ? 'Finalizar Venda / Cobrar (F2)' : 'Finalizar Venda (F2)'}
+            </button>
+
+            {isBalcaoMode && (
+              <button
+                type="button"
+                onClick={openComandaHandoff}
+                disabled={cart.length === 0}
+                className="w-full rounded-lg border border-sky-300 bg-sky-50 py-3 text-sm font-semibold text-sky-700 shadow-sm transition-colors hover:bg-sky-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+              >
                 <span className="flex items-center justify-center gap-2">
                   <Send size={16} />
-                  Enviar Pedido para o Caixa / Gerar Comanda
+                  Gerar Orçamento / Enviar ao Caixa Principal (F6)
                 </span>
-              ) : (
-                'Finalizar Venda (F2)'
-              )}
-            </button>
+              </button>
+            )}
 
             <button
               type="button"
@@ -3971,16 +3972,14 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
                       <Receipt size={16} />
                       Imprimir Prévia da Conta
                     </button>
-                    {!isBalcaoMode && (
-                      <button
-                        type="button"
-                        onClick={() => pullComandaToCashier(activeComanda)}
-                        className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
-                      >
-                        <ArrowRightCircle size={16} />
-                        Lançar para o Caixa (F2)
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => pullComandaToCashier(activeComanda)}
+                      className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+                    >
+                      <ArrowRightCircle size={16} />
+                      Lançar para o Caixa (F2)
+                    </button>
                   </div>
                 </div>
               )}

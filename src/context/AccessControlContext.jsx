@@ -5,9 +5,13 @@ import { useStoreSettings } from './StoreSettingsContext'
 import { useSession } from './SessionContext'
 import { isSupervisorRole } from './OperatorsContext'
 
-// No modo Balcão/Atendimento, só as telas de Vendas e Produtos ficam acessíveis
-// pelo Menu Lateral — todo o resto exige o PIN do Gerente/Admin para desbloquear.
-export const BALCAO_ALLOWED_TABS = ['vendas', 'produtos', 'ajuda']
+// No modo Balcão/Atendimento (Terminal Operacional / Caixa 02), os módulos
+// operacionais completos ficam acessíveis pelo Menu Lateral — Vendas (PDV),
+// Produtos, Clientes, Delivery, Trocas e Como Usar. Apenas os módulos de
+// gestão administrativa (Relatórios Financeiros, Configurações, Funcionários,
+// Logs, Orçamentos, Fornecedores e Histórico de Vendas) continuam fora dessa
+// lista e exigem o PIN do Gerente/Admin para desbloquear.
+export const BALCAO_ALLOWED_TABS = ['vendas', 'produtos', 'clientes', 'delivery', 'trocas', 'ajuda']
 
 // Abas que exigem o PIN do Supervisor para abrir, em qualquer modo de
 // operação (Mestre ou Balcão) — diferente da trava acima, que só vale no
