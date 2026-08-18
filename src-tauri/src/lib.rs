@@ -6,6 +6,9 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 mod licensing;
 use licensing::{ativar_serial, obter_hwid_maquina, verificar_status_licenca};
 
+mod server;
+use server::{is_local_server_running, start_local_server, stop_local_server};
+
 const DB_URL: &str = "sqlite:pdv_express.db";
 const DB_FILE_NAME: &str = "pdv_express.db";
 
@@ -468,7 +471,10 @@ pub fn run() {
       get_local_ip,
       obter_hwid_maquina,
       ativar_serial,
-      verificar_status_licenca
+      verificar_status_licenca,
+      start_local_server,
+      stop_local_server,
+      is_local_server_running
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

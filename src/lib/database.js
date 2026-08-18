@@ -10,13 +10,22 @@
 // caem para `localStorage`, preservando o mesmo formato, para que a tela
 // continue funcional fora do app empacotado.
 
-import { getConnection, isTauriRuntime } from '../services/db'
+import { getConnection, isTauriRuntime, getConfig } from '../services/db'
+import { fetchComandasFromMaster, postComandasToMaster } from '../services/masterClient'
 
 const LOCAL_STORAGE_KEY = 'pdv-sistema-2026:comandas'
 const TOTAL_COMANDAS = 30
 
 async function getDatabase() {
   return getConnection()
+}
+
+/** Mesma regra de `getLanTarget` em src/services/db.js — IP do Mestre só quando este PC está em modo Balcão. */
+async function getLanTarget() {
+  const mode = await getConfig('modo_operacao', 'mestre')
+  if (mode !== 'balcao') return null
+  const ip = await getConfig('ip_mestre', '')
+  return ip && ip.trim() ? ip.trim() : null
 }
 
 function emptyComandas() {
@@ -54,6 +63,14 @@ function persistToLocalStorage(comandas) {
  * então o nome vem do catálogo de produtos já carregado no frontend.
  */
 export async function loadComandas(getProductName) {
+  const target = await getLanTarget()
+  if (target) {
+    const result = await fetchComandasFromMaster(target, getProductName)
+    if (result.ok) return result.data
+    console.error(`[database] Falha ao carregar comandas do Caixa Principal (${target}):`, result.reason)
+    return emptyComandas()
+  }
+
   const db = await getDatabase()
   if (!db) return loadFromLocalStorage()
 
@@ -95,6 +112,15 @@ export async function loadComandas(getProductName) {
  * simples e correto para um único PC gravando localmente.
  */
 export async function persistComandas(comandas) {
+  const target = await getLanTarget()
+  if (target) {
+    const result = await postComandasToMaster(target, comandas)
+    if (!result.ok) {
+      console.error(`[database] Falha ao salvar comandas no Caixa Principal (${target}):`, result.reason)
+    }
+    return
+  }
+
   const db = await getDatabase()
   if (!db) {
     persistToLocalStorage(comandas)

@@ -87,26 +87,3 @@ export async function detectLocalIp() {
 
   return { ok: false, reason: 'unavailable' }
 }
-
-/**
- * Teste de alcance de rede best-effort: tenta abrir uma requisição para o IP
- * informado e mede se algo responde na rede local dentro do tempo limite.
- * Como este app não expõe um servidor HTTP próprio, o resultado indica apenas
- * se o endereço está vivo/alcançável na rede — não confirma o protocolo do PDV.
- */
-export async function testLanConnection(ip, timeoutMs = 2500) {
-  if (!isValidIp(ip)) return { ok: false, reason: 'invalid-ip' }
-
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-
-  try {
-    await fetch(`http://${ip.trim()}/`, { mode: 'no-cors', signal: controller.signal, cache: 'no-store' })
-    return { ok: true }
-  } catch (error) {
-    if (error?.name === 'AbortError') return { ok: false, reason: 'timeout' }
-    return { ok: false, reason: 'unreachable' }
-  } finally {
-    clearTimeout(timer)
-  }
-}

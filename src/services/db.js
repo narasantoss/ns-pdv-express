@@ -24,6 +24,13 @@
 // próprio `tauri-plugin-sql` (ver `src-tauri/src/lib.rs`), que é o mecanismo
 // nativo equivalente nesse ambiente.
 
+// Import tardio (não no topo do arquivo) de propósito: `masterClient.js`
+// importa `rowToProduct`/`rowToClient`/`rowToVenda` daqui, então este módulo
+// e `masterClient.js` formam um ciclo — ambos só usam essas referências
+// dentro de funções (nunca durante a avaliação inicial do módulo), o que o
+// ESM resolve normalmente via "live bindings".
+import { fetchProdutosFromMaster, fetchClientesFromMaster, postVendaToMaster } from './masterClient'
+
 const DB_URL = 'sqlite:pdv_express.db'
 const LS_PREFIX = 'pdv-express-db:'
 const LS_SCHEMA_VERSION_KEY = `${LS_PREFIX}_schema_version`
@@ -718,8 +725,29 @@ function parseJsonField(value, fallback) {
   }
 }
 
+/**
+ * IP do PC Mestre configurado neste PC, só quando `modo_operacao === 'balcao'`
+ * (ver StoreSettingsContext/ConfiguracoesMain) — ou `null` no modo Mestre (ou
+ * sem IP salvo), caso em que os repositórios abaixo seguem 100% locais como
+ * sempre foram. `modo_operacao`/`ip_mestre` são lidos direto de `configuracoes`
+ * (via `getConfig`, nunca via este mesmo helper) porque são sempre locais a
+ * cada PC — não fariam sentido vindos do Mestre.
+ */
+async function getLanTarget() {
+  const mode = await getConfig('modo_operacao', 'mestre')
+  if (mode !== 'balcao') return null
+  const ip = await getConfig('ip_mestre', '')
+  return ip && ip.trim() ? ip.trim() : null
+}
+
 export const produtosRepo = {
   async list() {
+    const target = await getLanTarget()
+    if (target) {
+      const result = await fetchProdutosFromMaster(target)
+      if (result.ok) return result.data
+      throw new Error(`Não foi possível carregar os produtos do Caixa Principal (${target}): ${result.reason}`)
+    }
     const rows = await listRows('produtos', { orderBy: 'nome' })
     return rows.map(rowToProduct)
   },
@@ -783,7 +811,7 @@ export const produtosRepo = {
   },
 }
 
-function rowToProduct(row) {
+export function rowToProduct(row) {
   const extra = parseJsonField(row.dados_extra, {})
   return {
     id: row.id,
@@ -827,6 +855,12 @@ function productToRow(product) {
 
 export const clientesRepo = {
   async list() {
+    const target = await getLanTarget()
+    if (target) {
+      const result = await fetchClientesFromMaster(target)
+      if (result.ok) return result.data
+      throw new Error(`Não foi possível carregar os clientes do Caixa Principal (${target}): ${result.reason}`)
+    }
     const rows = await listRows('clientes', { orderBy: 'nome' })
     return rows.map(rowToClient)
   },
@@ -863,7 +897,7 @@ export const clientesRepo = {
   },
 }
 
-function rowToClient(row) {
+export function rowToClient(row) {
   return {
     id: row.id,
     name: row.nome ?? '',
@@ -888,7 +922,7 @@ function clientToRow(client) {
   }
 }
 
-function rowToVenda(row) {
+export function rowToVenda(row) {
   const extra = parseJsonField(row.dados_extra, {})
   return {
     id: row.id,
@@ -956,19 +990,27 @@ export const vendasRepo = {
    * via `applyExternalUpdate`, sem precisar recalcular o estoque/saldo na UI
    * nem disparar uma segunda escrita no banco.
    */
-  async registerSale({
-    clienteId,
-    operador,
-    itens,
-    totalBruto,
-    desconto,
-    totalLiquido,
-    formaPagamento,
-    status,
-    troco,
-    amountReceived,
-    splitPayments,
-  }) {
+  async registerSale(payload) {
+    const target = await getLanTarget()
+    if (target) {
+      const result = await postVendaToMaster(target, payload)
+      if (result.ok) return result.data
+      throw new Error(`Não foi possível registrar a venda no Caixa Principal (${target}): ${result.reason}`)
+    }
+
+    const {
+      clienteId,
+      operador,
+      itens,
+      totalBruto,
+      desconto,
+      totalLiquido,
+      formaPagamento,
+      status,
+      troco,
+      amountReceived,
+      splitPayments,
+    } = payload
     const venda = await insertRow('vendas', {
       cliente_id: clienteId ?? null,
       operador: operador ?? '',

@@ -17,6 +17,9 @@
     "allow-get-local-ip",
     "allow-obter-hwid-maquina",
     "allow-ativar-serial",
-    "allow-verificar-status-licenca"
+    "allow-verificar-status-licenca",
+    "allow-start-local-server",
+    "allow-stop-local-server",
+    "allow-is-local-server-running"
   ]
 }

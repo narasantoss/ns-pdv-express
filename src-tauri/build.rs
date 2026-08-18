@@ -8,6 +8,9 @@ fn main() {
         "obter_hwid_maquina",
         "ativar_serial",
         "verificar_status_licenca",
+        "start_local_server",
+        "stop_local_server",
+        "is_local_server_running",
       ]),
     ),
   )

@@ -5,6 +5,7 @@ import App from './App.jsx'
 import ErrorBoundary from './components/common/ErrorBoundary.jsx'
 import { installGlobalErrorLogging } from './utils/appLog.js'
 import { StoreSettingsProvider } from './context/StoreSettingsContext.jsx'
+import { NetworkSyncProvider } from './context/NetworkSyncContext.jsx'
 import { CashRegisterProvider } from './context/CashRegisterContext.jsx'
 import { AccessControlProvider } from './context/AccessControlContext.jsx'
 import { ManagerAuthProvider } from './context/ManagerAuthContext.jsx'
@@ -23,29 +24,31 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
       <StoreSettingsProvider>
-        <OperatorsProvider>
-          <SessionProvider>
-            <AccessControlProvider>
-              <ManagerAuthProvider>
-                <CashRegisterProvider>
-                  <SuppliersProvider>
-                    <ProductsProvider>
-                      <ClientsProvider>
-                        <DeliveryProvider>
-                          <PendingSaleProvider>
-                            <OnboardingProvider>
-                              <App />
-                            </OnboardingProvider>
-                          </PendingSaleProvider>
-                        </DeliveryProvider>
-                      </ClientsProvider>
-                    </ProductsProvider>
-                  </SuppliersProvider>
-                </CashRegisterProvider>
-              </ManagerAuthProvider>
-            </AccessControlProvider>
-          </SessionProvider>
-        </OperatorsProvider>
+        <NetworkSyncProvider>
+          <OperatorsProvider>
+            <SessionProvider>
+              <AccessControlProvider>
+                <ManagerAuthProvider>
+                  <CashRegisterProvider>
+                    <SuppliersProvider>
+                      <ProductsProvider>
+                        <ClientsProvider>
+                          <DeliveryProvider>
+                            <PendingSaleProvider>
+                              <OnboardingProvider>
+                                <App />
+                              </OnboardingProvider>
+                            </PendingSaleProvider>
+                          </DeliveryProvider>
+                        </ClientsProvider>
+                      </ProductsProvider>
+                    </SuppliersProvider>
+                  </CashRegisterProvider>
+                </ManagerAuthProvider>
+              </AccessControlProvider>
+            </SessionProvider>
+          </OperatorsProvider>
+        </NetworkSyncProvider>
       </StoreSettingsProvider>
     </ErrorBoundary>
   </StrictMode>,

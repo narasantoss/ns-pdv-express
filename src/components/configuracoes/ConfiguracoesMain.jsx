@@ -36,7 +36,8 @@ import {
   restoreFromJsonBackup,
 } from '../../lib/database'
 import { downloadTextFile, downloadBinaryFile, buildProductsExportCsv } from '../../utils/csv'
-import { detectLocalIp, testLanConnection, isValidIp } from '../../utils/network'
+import { detectLocalIp, isValidIp } from '../../utils/network'
+import { pingMaster } from '../../services/masterClient'
 
 const ACCEPTED_TYPES = ['image/png', 'image/jpeg']
 const MAX_FILE_SIZE = 2 * 1024 * 1024
@@ -115,8 +116,8 @@ export default function ConfiguracoesMain() {
 
   async function handleTestConnection() {
     setConnTestState('testing')
-    const result = await testLanConnection(draft.masterIp)
-    setConnTestState(result.ok ? 'success' : 'error')
+    const result = await pingMaster(draft.masterIp)
+    setConnTestState(result.ok && result.data?.role === 'mestre' ? 'success' : 'error')
     clearTimeout(connTestTimeoutRef.current)
     connTestTimeoutRef.current = setTimeout(() => setConnTestState('idle'), 4000)
   }
@@ -564,14 +565,15 @@ export default function ConfiguracoesMain() {
                 {connTestState === 'success' && (
                   <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-emerald-600">
                     <CheckCircle2 size={13} />
-                    Este computador respondeu na rede local.
+                    Caixa Principal encontrado e respondendo nessa rede.
                   </p>
                 )}
                 {connTestState === 'error' && (
                   <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600">
                     <XCircle size={13} />
-                    Não foi possível alcançar esse endereço. Confira se os dois computadores estão
-                    no mesmo Wi-Fi/roteador e se o código foi digitado corretamente.
+                    Não foi possível alcançar o Caixa Principal nesse endereço. Confira se os dois
+                    computadores estão no mesmo Wi-Fi/roteador, se o código foi digitado corretamente
+                    e se o outro PC está configurado como "PC Mestre / Caixa Principal".
                   </p>
                 )}
               </div>
