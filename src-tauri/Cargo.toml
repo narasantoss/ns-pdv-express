@@ -25,8 +25,10 @@ tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 # Etapa 5: Módulo de Licenciamento (HWID + RSA offline) — ver src/licensing.rs.
-rsa = { version = "0.9", features = ["pem"] }
-sha2 = "0.10"
+# feature "sha2" do crate rsa + "oid" do crate sha2 são exigidas para
+# Pkcs1v15Sign::new::<Sha256>() (precisa de Sha256: AssociatedOid).
+rsa = { version = "0.9", features = ["pem", "sha2"] }
+sha2 = { version = "0.10", features = ["oid"] }
 rand = "0.8"
 base64 = "0.22"
 
