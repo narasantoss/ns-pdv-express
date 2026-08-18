@@ -5,6 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 // https://v2.tauri.app/start/frontend/vite/
 export default defineConfig({
+  base: './',
   plugins: [react(), tailwindcss()],
 
   // Vite options tailored for Tauri development
