@@ -13,6 +13,7 @@ const lastAccessFormatter = new Intl.DateTimeFormat('pt-BR', {
 })
 
 function formatLastAccess(isoString) {
+  if (!isoString) return 'Nunca acessou'
   return lastAccessFormatter.format(new Date(isoString))
 }
 
@@ -30,10 +31,11 @@ function onlyDigits(value) {
   return value.replace(/\D/g, '').slice(0, 4)
 }
 
-const EMPTY_FORM = { name: '', username: '', role: 'operador', pin: '', status: 'ativo' }
+const EMPTY_FORM = { name: '', role: 'operador', pin: '', status: 'ativo' }
 
 export default function OperadoresMain() {
-  const { operators, setOperators } = useOperators()
+  const { operators, createOperator, updateOperator, updateOperatorPin, setOperatorStatus, removeOperator } =
+    useOperators()
   const { currentOperator } = useSession()
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -42,6 +44,7 @@ export default function OperadoresMain() {
   const [pinModalTarget, setPinModalTarget] = useState(null)
   const [pinDraft, setPinDraft] = useState('')
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [saving, setSaving] = useState(false)
 
   // Só quem já é Gerente/Admin (ou o próprio funcionário) pode ver/editar o
   // PIN em texto puro no modal — ver requisito de mascarar PIN alheio na
@@ -52,8 +55,7 @@ export default function OperadoresMain() {
   }
 
   const pinRequiresValidPattern = !editingId || pinTouched
-  const canSubmit =
-    form.name.trim() && form.username.trim() && (pinRequiresValidPattern ? /^\d{4}$/.test(form.pin) : true)
+  const canSubmit = form.name.trim() && (pinRequiresValidPattern ? /^\d{4}$/.test(form.pin) : true)
 
   function openCreateModal() {
     setEditingId(null)
@@ -67,7 +69,6 @@ export default function OperadoresMain() {
     setEditingId(operator.id)
     setForm({
       name: operator.name,
-      username: operator.username,
       role: operator.role,
       pin: revealPin ? operator.pin : '',
       status: operator.status,
@@ -85,41 +86,28 @@ export default function OperadoresMain() {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
-    if (!canSubmit) return
-
-    if (editingId) {
-      setOperators((prev) =>
-        prev.map((operator) =>
-          operator.id === editingId
-            ? {
-                ...operator,
-                name: form.name.trim(),
-                username: form.username.trim(),
-                role: form.role,
-                // PIN não tocado (campo ficou mascarado/vazio, sem edição) mantém o valor atual do funcionário.
-                pin: pinTouched ? form.pin : operator.pin,
-                status: form.status,
-              }
-            : operator,
-        ),
-      )
-    } else {
-      setOperators((prev) => [
-        ...prev,
-        {
-          id: prev.length ? Math.max(...prev.map((operator) => operator.id)) + 1 : 1,
+    if (!canSubmit || saving) return
+    setSaving(true)
+    try {
+      if (editingId) {
+        await updateOperator(editingId, {
           name: form.name.trim(),
-          username: form.username.trim(),
           role: form.role,
-          pin: form.pin,
           status: form.status,
-          lastAccess: new Date().toISOString(),
-        },
-      ])
+        })
+        // PIN não tocado (campo ficou mascarado/vazio, sem edição) mantém o valor atual do funcionário.
+        if (pinTouched) await updateOperatorPin(editingId, form.pin)
+      } else {
+        await createOperator({ name: form.name.trim(), role: form.role, pin: form.pin, status: form.status })
+      }
+      setShowModal(false)
+    } catch (error) {
+      console.error('[operadores] Falha ao salvar funcionário:', error)
+    } finally {
+      setSaving(false)
     }
-    setShowModal(false)
   }
 
   function openPinModal(operator) {
@@ -131,15 +119,10 @@ export default function OperadoresMain() {
     setPinModalTarget(null)
   }
 
-  function submitPinChange(event) {
+  async function submitPinChange(event) {
     event.preventDefault()
     if (pinDraft.length !== 4) return
-
-    setOperators((prev) =>
-      prev.map((operator) =>
-        operator.id === pinModalTarget.id ? { ...operator, pin: pinDraft } : operator,
-      ),
-    )
+    await updateOperatorPin(pinModalTarget.id, pinDraft)
     setPinModalTarget(null)
   }
 
@@ -151,19 +134,13 @@ export default function OperadoresMain() {
     setDeleteTarget(null)
   }
 
-  function toggleTargetStatus() {
-    setOperators((prev) =>
-      prev.map((operator) =>
-        operator.id === deleteTarget.id
-          ? { ...operator, status: operator.status === 'ativo' ? 'inativo' : 'ativo' }
-          : operator,
-      ),
-    )
+  async function toggleTargetStatus() {
+    await setOperatorStatus(deleteTarget.id, deleteTarget.status === 'ativo' ? 'inativo' : 'ativo')
     setDeleteTarget(null)
   }
 
-  function confirmDelete() {
-    setOperators((prev) => prev.filter((operator) => operator.id !== deleteTarget.id))
+  async function confirmDelete() {
+    await removeOperator(deleteTarget.id)
     setDeleteTarget(null)
   }
 
@@ -172,7 +149,7 @@ export default function OperadoresMain() {
       <header className="flex shrink-0 items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
         <div>
           <h1 className="text-lg font-bold text-slate-900">Funcionários</h1>
-          <p className="text-sm text-slate-500">Gerencie funcionários, cargos e permissões de acesso</p>
+          <p className="text-sm text-slate-500">Gerencie funcionários, perfis e permissões de acesso</p>
         </div>
 
         <button
@@ -185,12 +162,19 @@ export default function OperadoresMain() {
         </button>
       </header>
 
+      <div className="shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-5 py-3 text-xs text-slate-500">
+        <span className="font-semibold text-violet-700">Gerente/Admin</span>: acesso total (relatórios,
+        financeiro, custos, configurações).{' '}
+        <span className="font-semibold text-slate-700">Operador</span>: acesso restrito (apenas Frente de
+        Caixa, consultas básicas e vendas).
+      </div>
+
       <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <th className="px-5 py-3">Funcionário</th>
-              <th className="px-5 py-3">Cargo</th>
+              <th className="px-5 py-3">Perfil</th>
               <th className="px-5 py-3">PIN</th>
               <th className="px-5 py-3">Status</th>
               <th className="px-5 py-3">Último acesso</th>
@@ -212,10 +196,7 @@ export default function OperadoresMain() {
                       >
                         {initialsFor(operator.name)}
                       </div>
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-slate-800">{operator.name}</p>
-                        <p className="truncate text-xs text-slate-400">@{operator.username}</p>
-                      </div>
+                      <p className="truncate font-medium text-slate-800">{operator.name}</p>
                     </div>
                   </td>
                   <td className="px-5 py-3">
@@ -332,32 +313,10 @@ export default function OperadoresMain() {
 
               <div>
                 <label
-                  htmlFor="operator-username"
-                  className="text-xs font-medium uppercase tracking-wide text-slate-500"
-                >
-                  Nome de Usuário
-                </label>
-                <div className="relative mt-1">
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
-                    @
-                  </span>
-                  <input
-                    id="operator-username"
-                    type="text"
-                    value={form.username}
-                    onChange={(event) => updateField('username', event.target.value)}
-                    placeholder="usuario"
-                    className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 pl-8 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label
                   htmlFor="operator-role"
                   className="text-xs font-medium uppercase tracking-wide text-slate-500"
                 >
-                  Cargo / Perfil
+                  Perfil de Acesso
                 </label>
                 <select
                   id="operator-role"
@@ -371,6 +330,11 @@ export default function OperadoresMain() {
                     </option>
                   ))}
                 </select>
+                <p className="mt-1 text-xs text-slate-400">
+                  {form.role === 'admin'
+                    ? 'Acesso total: relatórios, financeiro, custos e configurações.'
+                    : 'Acesso restrito: apenas Frente de Caixa, consultas básicas e vendas.'}
+                </p>
               </div>
 
               <div>
@@ -378,7 +342,7 @@ export default function OperadoresMain() {
                   htmlFor="operator-pin"
                   className="text-xs font-medium uppercase tracking-wide text-slate-500"
                 >
-                  PIN de Acesso Rápido (4 dígitos)
+                  PIN de Acesso (4 dígitos)
                 </label>
                 <input
                   id="operator-pin"
@@ -438,10 +402,10 @@ export default function OperadoresMain() {
                 </button>
                 <button
                   type="submit"
-                  disabled={!canSubmit}
+                  disabled={!canSubmit || saving}
                   className="flex-1 rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
-                  Salvar
+                  {saving ? 'Salvando…' : 'Salvar'}
                 </button>
               </div>
             </form>
@@ -469,7 +433,7 @@ export default function OperadoresMain() {
             </div>
 
             <p className="mb-4 text-sm text-slate-500">
-              Defina um novo PIN de acesso rápido para{' '}
+              Defina um novo PIN de acesso para{' '}
               <span className="font-semibold text-slate-700">{pinModalTarget.name}</span>.
             </p>
 

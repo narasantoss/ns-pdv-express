@@ -31,10 +31,34 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 // assinar) Chaves de Ativação offline. A chave privada correspondente nunca
 // entra neste repositório — fica só com o suporte (ver
 // `src-tauri/licensing/private_key.pem`, ignorado no .gitignore, e
-// `src/bin/gerar_licenca.rs`).
+// `src/bin/gerar_licenca.rs`). Mantida como fallback de compatibilidade para
+// chaves antigas assinadas por HWID — o fluxo padrão a partir da v1.0.5 é a
+// Chave Serial Padrão abaixo (`MASTER_SERIAL_KEY`), que não depende de HWID.
 const LICENSE_PUBLIC_KEY_PEM: &str = include_str!("../licensing/public_key.pem");
 
 const LICENSE_FILE_NAME: &str = "licenca.json";
+
+// Chave Serial Padrão (v1.0.5): produto vendido com uma única chave de
+// ativação, igual para todos os compradores — sem geração individual por
+// HWID/suporte manual. Comparada de forma normalizada (ver `normalize_key`):
+// case-insensitive, ignorando espaços e hífens extras, para tolerar como o
+// operador digitar/colar o código recebido na confirmação do pedido.
+const MASTER_SERIAL_KEY: &str = "NSPDV-2026-PRO-BR99";
+
+const INVALID_KEY_MESSAGE: &str =
+    "Chave inválida. Verifique o código recebido na confirmação do seu pedido.";
+
+/// Normaliza uma Chave de Licença para comparação: maiúsculas, sem espaços,
+/// hífens ou qualquer outro separador — só letras e dígitos sobrevivem. Isso
+/// deixa a validação tolerante a como o operador copia/cola o código (com
+/// espaços extras, hífens a mais/a menos, minúsculas etc.).
+fn normalize_key(value: &str) -> String {
+    value
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_uppercase())
+        .collect()
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 struct LicenseRecord {
@@ -159,19 +183,28 @@ fn verify_license_key(chave: &str, hwid: &str) -> Result<(), String> {
 }
 
 /// Ativação por Chave de Licença Serial (tela de ativação): recebe só o
-/// serial colado pelo operador, deriva o HWID desta máquina internamente
-/// (nunca confia em um HWID vindo do lado JS) e valida a assinatura RSA do
-/// serial contra esse HWID, 100% offline. Se válida, persiste o marcador
-/// local de licença ativa (ver `LicenseRecord`) usado por
-/// `verificar_status_licenca` no próximo boot, e devolve o HWID usado para
-/// que o lado JS grave a linha "oficial" em `licenca_local` (SQLite) via
-/// `licencaLocalRepo.activate` — ver `TelaAtivacaoLicenca.jsx`.
+/// serial colado pelo operador e deriva o HWID desta máquina internamente
+/// (nunca confia em um HWID vindo do lado JS — o HWID só existe aqui como
+/// identificador técnico auxiliar, fora da visão primária da tela). Compara
+/// o serial normalizado (case-insensitive, sem espaços/hífens) contra a
+/// Chave Serial Padrão (`MASTER_SERIAL_KEY`); se não bater, ainda tenta o
+/// fluxo legado de assinatura RSA por HWID (chaves antigas, geradas antes da
+/// v1.0.5), para não invalidar ativações já feitas. Se nenhum dos dois
+/// validar, devolve a mensagem amigável exibida em vermelho na tela de
+/// ativação. Quando válida, persiste o marcador local de licença ativa (ver
+/// `LicenseRecord`) usado por `verificar_status_licenca` no próximo boot, e
+/// devolve o HWID para que o lado JS grave a linha "oficial" em
+/// `licenca_local` (SQLite) via `licencaLocalRepo.activate` — ver
+/// `TelaAtivacaoLicenca.jsx`.
 #[tauri::command]
 pub fn ativar_serial(app: tauri::AppHandle, serial: String) -> Result<String, String> {
     let seed = machine_seed(&app)?;
     let hwid = format_hwid(&seed);
 
-    verify_license_key(&serial, &hwid)?;
+    let is_master_key = normalize_key(&serial) == normalize_key(MASTER_SERIAL_KEY);
+    if !is_master_key {
+        verify_license_key(&serial, &hwid).map_err(|_| INVALID_KEY_MESSAGE.to_string())?;
+    }
 
     write_license_record(
         &app,

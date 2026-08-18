@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { useOperators } from './OperatorsContext'
 
 const SESSION_STORAGE_KEY = 'ns-pdv-express:session-operator-id'
@@ -23,12 +23,24 @@ function readStoredOperatorId() {
 const SessionContext = createContext(null)
 
 export function SessionProvider({ children }) {
-  const { operators } = useOperators()
-  const [currentOperator, setCurrentOperator] = useState(() => {
+  const { operators, isLoaded } = useOperators()
+  const [currentOperator, setCurrentOperator] = useState(null)
+  const [restored, setRestored] = useState(false)
+
+  // `operators` carrega de forma assíncrona do SQLite local (ver
+  // OperatorsContext) — diferente do antigo cadastro síncrono em
+  // localStorage, não dá pra restaurar a sessão salva (ver
+  // `readStoredOperatorId`) já no `useState` inicial. Restaura assim que a
+  // lista terminar de carregar, uma única vez (`restored`), pra um F5/reload
+  // não cair na Tela de Login enquanto o operador seguia com sessão válida.
+  useEffect(() => {
+    if (!isLoaded || restored) return
+    setRestored(true)
     const storedId = readStoredOperatorId()
-    if (storedId == null) return null
-    return operators.find((operator) => operator.id === storedId && operator.status === 'ativo') ?? null
-  })
+    if (storedId == null) return
+    const stored = operators.find((operator) => operator.id === storedId && operator.status === 'ativo')
+    if (stored) setCurrentOperator(stored)
+  }, [isLoaded, restored, operators])
 
   function login(operator) {
     setCurrentOperator(operator)

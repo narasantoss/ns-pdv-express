@@ -15,7 +15,7 @@ const KEYPAD_ROWS = [
 
 export default function LoginScreen() {
   const { settings } = useStoreSettings()
-  const { findByPin, setOperators } = useOperators()
+  const { findByPin, touchLastAccess } = useOperators()
   const { login } = useSession()
   const [pin, setPin] = useState('')
   const [error, setError] = useState(false)
@@ -27,10 +27,8 @@ export default function LoginScreen() {
       setPin('')
       return
     }
-    setOperators((prev) =>
-      prev.map((item) =>
-        item.id === operator.id ? { ...item, lastAccess: new Date().toISOString() } : item,
-      ),
+    touchLastAccess(operator.id).catch((err) =>
+      console.error('[login] Falha ao registrar o último acesso do operador:', err),
     )
     login(operator)
   }

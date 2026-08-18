@@ -81,6 +81,33 @@ body {
   display: none;
 }
 
+/* Efeito de "shake" no campo de Chave de Licença Serial quando o operador
+   digita uma chave inválida (ver TelaAtivacaoLicenca.jsx) — reforço visual
+   junto da mensagem em vermelho. */
+@keyframes shake-field {
+  10%,
+  90% {
+    transform: translateX(-1px);
+  }
+  20%,
+  80% {
+    transform: translateX(2px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-4px);
+  }
+  40%,
+  60% {
+    transform: translateX(4px);
+  }
+}
+
+.shake-field {
+  animation: shake-field 0.4s ease-in-out;
+}
+
 @media print {
   @page {
     size: A4;

@@ -309,24 +309,35 @@ export default function ComoUsarMain() {
                 </span>
               </div>
               <p className="text-sm text-slate-600">
-                Para compras feitas pelo Site, E-mail, WhatsApp ou Mercado Livre, a ativação não depende de
-                suporte manual: assim que a compra é confirmada, a Chave de Licença é enviada instantaneamente
-                pelo próprio canal da compra (chat do Mercado Livre, e-mail de confirmação do site ou WhatsApp).
+                A ativação não depende de suporte manual: assim que sua compra é confirmada, a Chave de
+                Ativação é enviada instantaneamente na confirmação do seu pedido.
               </p>
 
               <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-slate-600">
-                <li>Abra o sistema NS PDV Express no computador onde ele será usado.</li>
-                <li>Cole a Chave de Licença recebida no campo de ativação.</li>
+                <li>Baixe o instalador oficial pelo link disponibilizado na confirmação do seu pedido.</li>
                 <li>
-                  Clique em <span className="font-semibold">"Ativar"</span>.
+                  Se o Windows exibir o aviso do SmartScreen, clique em{' '}
+                  <span className="font-semibold">"Mais informações"</span> e depois em{' '}
+                  <span className="font-semibold">"Executar assim mesmo"</span>.
+                </li>
+                <li>
+                  Insira a sua Chave de Ativação recebida e clique em{' '}
+                  <span className="font-semibold">"Ativar Licença Vitalícia"</span>.
                 </li>
               </ol>
 
               <p className="mt-3 text-sm text-slate-600">
-                A chave é assinada digitalmente (RSA) e vinculada ao HWID deste computador (identificador acima)
-                automaticamente em segundo plano, sem necessidade de contato com o suporte. A validação é feita
-                localmente no primeiro acesso e a ativação ocorre uma única vez por computador.
+                A validação é feita localmente, sem necessidade de internet ou contato com o suporte, e a
+                ativação ocorre uma única vez por computador.
               </p>
+
+              <div className="mt-4 flex items-center gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-3">
+                <ShieldCheck size={18} className="shrink-0 text-emerald-600" />
+                <div>
+                  <p className="text-sm font-bold text-emerald-800">Licença Vitalícia Ativa</p>
+                  <p className="text-xs text-emerald-600">Edição Comercial</p>
+                </div>
+              </div>
             </div>
 
             <div className="rounded-lg border border-slate-200 p-4">

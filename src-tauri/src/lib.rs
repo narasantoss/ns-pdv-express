@@ -28,15 +28,53 @@ fn write_database_file(app: tauri::AppHandle, bytes: Vec<u8>) -> Result<(), Stri
 
 // Descobre o IPv4 local deste computador na rede (usado como "Código de Conexão"
 // exibido no PC Mestre para o Modo de Operação em Rede Local). Não envia nenhum
-// dado de fato — abrir um socket UDP "conectado" a um IP externo apenas faz o
-// sistema operacional escolher a interface/rota de saída, cujo endereço local é
-// lido em seguida. Funciona offline, sem depender de internet real.
+// dado de fato — abrir um socket UDP "conectado" a um IP apenas faz o sistema
+// operacional escolher, via tabela de rotas, a interface/rota de saída cujo
+// endereço local é lido em seguida (nenhum pacote chega a sair de fato para um
+// endereço de gateway típico). Funciona offline, sem depender de internet real.
+fn local_ip_via_route(target: &str) -> Option<String> {
+  let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+  socket.connect(target).ok()?;
+  let addr = socket.local_addr().ok()?;
+  Some(addr.ip().to_string())
+}
+
+// IPv4 local válido para Rede Local Multi-PC (Mestre/Balcão): faixas privadas
+// padrão de roteador doméstico/comercial (192.168.x.x) ou de rede corporativa
+// maior (10.x.x.x) — ver Etapa "Detecção de IP Local para Multi-PC".
+fn is_preferred_lan_ip(ip: &str) -> bool {
+  ip.starts_with("192.168.") || ip.starts_with("10.")
+}
+
 #[tauri::command]
 fn get_local_ip() -> Result<String, String> {
-  let socket = UdpSocket::bind("0.0.0.0:0").map_err(|error| error.to_string())?;
-  socket.connect("8.8.8.8:80").map_err(|error| error.to_string())?;
-  let addr = socket.local_addr().map_err(|error| error.to_string())?;
-  Ok(addr.ip().to_string())
+  // Tenta primeiro rotear para gateways típicos de rede local (192.168.x.x /
+  // 10.x.x.x): isso faz o sistema operacional escolher a interface
+  // Wi-Fi/Ethernet ativa que enxerga aquela faixa privada, em vez de um
+  // adaptador de VPN/virtual (que normalmente não roteia redes privadas locais).
+  // Só cai para a rota de internet (8.8.8.8) como último recurso, se nenhuma
+  // rota local responder.
+  let candidates = [
+    "192.168.0.1:80",
+    "192.168.1.1:80",
+    "192.168.15.1:80",
+    "10.0.0.1:80",
+    "8.8.8.8:80",
+  ];
+
+  let mut first_found: Option<String> = None;
+  for target in candidates {
+    if let Some(ip) = local_ip_via_route(target) {
+      if is_preferred_lan_ip(&ip) {
+        return Ok(ip);
+      }
+      if first_found.is_none() {
+        first_found = Some(ip);
+      }
+    }
+  }
+
+  first_found.ok_or_else(|| "Não foi possível detectar o IP local desta rede.".to_string())
 }
 
 fn migrations() -> Vec<Migration> {
@@ -387,6 +425,29 @@ fn migrations() -> Vec<Migration> {
       sql: "
         ALTER TABLE produtos ADD COLUMN pesavel INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE produtos ADD COLUMN codigo_balanca TEXT;
+      ",
+      kind: MigrationKind::Up,
+    },
+    // v1.0.5 — Controle de Acesso e Perfis (Gerente/Admin vs. Operador):
+    // cadastro de usuários do sistema propriamente dito, persistido no SQLite
+    // local (substitui o cadastro de demonstração antes mantido só em
+    // localStorage — ver espelho em src/services/db.js/usuariosRepo). Tabela
+    // vazia por padrão: `usuariosRepo.count() === 0` dispara a tela de
+    // Primeiro Acesso ("Criar Usuário Administrador"), que cadastra a
+    // primeira linha aqui com `perfil = 'admin'`.
+    Migration {
+      version: 12,
+      description: "create_usuarios",
+      sql: "
+        CREATE TABLE IF NOT EXISTS usuarios (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          nome TEXT NOT NULL,
+          pin_senha TEXT NOT NULL,
+          perfil TEXT NOT NULL DEFAULT 'operador',
+          ativo INTEGER NOT NULL DEFAULT 1,
+          criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          ultimo_acesso TEXT
+        );
       ",
       kind: MigrationKind::Up,
     },

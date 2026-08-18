@@ -16,6 +16,23 @@ import { isTauriRuntime, licencaLocalRepo } from './db'
 
 const LS_HWID_SEED_KEY = 'pdv-express-db:_hwid_seed'
 
+// Chave Serial Padrão (v1.0.5) — mesmo valor de `MASTER_SERIAL_KEY` em
+// src-tauri/src/licensing.rs. Produto vendido com uma única chave de
+// ativação, igual para todos os compradores, sem geração individual por
+// HWID/suporte manual.
+const MASTER_SERIAL_KEY = 'NSPDV-2026-PRO-BR99'
+
+export const INVALID_KEY_MESSAGE = 'Chave inválida. Verifique o código recebido na confirmação do seu pedido.'
+
+/** Maiúsculas, sem espaços/hífens/qualquer separador — ver `normalize_key` em src-tauri/src/licensing.rs. */
+function normalizeKey(value) {
+  return (value ?? '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+}
+
+function isMasterKey(serial) {
+  return normalizeKey(serial) === normalizeKey(MASTER_SERIAL_KEY)
+}
+
 // Mesma chave pública RSA-2048 embutida no binário Rust
 // (src-tauri/licensing/public_key.pem) — formato SPKI/DER em base64, pronta
 // para `SubtleCrypto.importKey('spki', ...)`. Usada só no fallback de
@@ -104,18 +121,23 @@ export async function ativarSerial(serial) {
     const { invoke } = await import('@tauri-apps/api/core')
     try {
       hwid = await invoke('ativar_serial', { serial: serialLimpo })
-    } catch {
-      throw new Error('Chave inválida ou já utilizada.')
+    } catch (err) {
+      throw new Error(typeof err === 'string' ? err : err?.message || INVALID_KEY_MESSAGE)
     }
   } else {
     hwid = await browserHwid()
-    let valid = false
-    try {
-      valid = await browserVerifyLicenseKey(serialLimpo, hwid)
-    } catch {
-      valid = false
+    // Chave Serial Padrão (v1.0.5): comparação normalizada, sem depender do
+    // HWID — ver `isMasterKey`. Mantém o fluxo legado de assinatura RSA por
+    // HWID como fallback, para chaves antigas geradas antes desta versão.
+    let valid = isMasterKey(serialLimpo)
+    if (!valid) {
+      try {
+        valid = await browserVerifyLicenseKey(serialLimpo, hwid)
+      } catch {
+        valid = false
+      }
     }
-    if (!valid) throw new Error('Chave inválida ou já utilizada.')
+    if (!valid) throw new Error(INVALID_KEY_MESSAGE)
   }
 
   await licencaLocalRepo.activate({ chaveRsa: serialLimpo, hwidMaquina: hwid })

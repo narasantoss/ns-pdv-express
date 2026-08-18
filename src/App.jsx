@@ -15,6 +15,7 @@ import FornecedoresMain from './components/fornecedores/FornecedoresMain'
 import ComoUsarMain from './components/ajuda/ComoUsarMain'
 import LogsMain from './components/logs/LogsMain'
 import LoginScreen from './components/auth/LoginScreen'
+import SetupAdminScreen from './components/auth/SetupAdminScreen'
 import CashOpeningModal from './components/auth/CashOpeningModal'
 import TelaAtivacaoLicenca from './components/auth/TelaAtivacaoLicenca'
 import OnboardingTour from './components/common/OnboardingTour'
@@ -22,6 +23,7 @@ import LoadingScreen from './components/common/LoadingScreen'
 import TelaBoasVindas from './components/common/TelaBoasVindas'
 import { useAccessControl } from './context/AccessControlContext'
 import { useSession } from './context/SessionContext'
+import { useOperators } from './context/OperatorsContext'
 import { useCashRegister } from './context/CashRegisterContext'
 import { useBrandIdentity } from './hooks/useBrandIdentity'
 import { verificarStatusLicenca } from './services/licensing'
@@ -151,6 +153,7 @@ function App() {
   const { isTabRestricted, isSupervisorGated, hasSupervisorAccess, isUnlocked, requestUnlock, isBalcaoMode } =
     useAccessControl()
   const { currentOperator, logout } = useSession()
+  const { isLoaded: areOperatorsLoaded, needsSetup } = useOperators()
   const { isOpen: isCashOpen, isLoaded: isCashLoaded } = useCashRegister()
   const [licenseActive, setLicenseActive] = useState(null)
   const [welcomeDismissed, setWelcomeDismissed] = useState(readSkipWelcome)
@@ -241,6 +244,17 @@ function App() {
   }
   if (!licenseActive) {
     return <TelaAtivacaoLicenca onActivated={() => setLicenseActive(true)} />
+  }
+
+  // Controle de Acesso e Perfis: aguarda o cadastro de usuários carregar do
+  // SQLite local antes de decidir entre a tela de Primeiro Acesso (cadastro
+  // vazio) e a Tela de Login normal — evita um "flash" da Tela de Login para
+  // quem ainda nem tem um Administrador cadastrado.
+  if (!areOperatorsLoaded) {
+    return <LoadingScreen label="Carregando usuários do sistema..." />
+  }
+  if (needsSetup) {
+    return <SetupAdminScreen />
   }
 
   if (!currentOperator) {

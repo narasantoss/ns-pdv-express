@@ -21,6 +21,7 @@ export default function TelaAtivacaoLicenca({ onActivated }) {
   const [serial, setSerial] = useState('')
   const [status, setStatus] = useState('idle') // idle | busy | success | error
   const [error, setError] = useState('')
+  const [shake, setShake] = useState(false)
   const [showHwid, setShowHwid] = useState(false)
   const [hwid, setHwid] = useState(null)
   const [hwidError, setHwidError] = useState(false)
@@ -63,7 +64,8 @@ export default function TelaAtivacaoLicenca({ onActivated }) {
       window.setTimeout(() => onActivated?.(), 900)
     } catch (err) {
       setStatus('error')
-      setError(err?.message || 'Chave inválida ou já utilizada.')
+      setError(err?.message || 'Chave inválida. Verifique o código recebido na confirmação do seu pedido.')
+      setShake(true)
     }
   }
 
@@ -109,7 +111,8 @@ export default function TelaAtivacaoLicenca({ onActivated }) {
                 setError('')
                 setSerial(event.target.value)
               }}
-              placeholder="NSPDV-XXXX-XXXX-XXXX"
+              onAnimationEnd={() => setShake(false)}
+              placeholder="NSPDV-2026-PRO-BR99"
               className={clsx(
                 'mt-1 w-full rounded-lg border bg-slate-50 px-3 py-3 text-center text-base font-mono font-semibold tracking-wide outline-none focus:ring-2 disabled:opacity-60',
                 status === 'error'
@@ -117,6 +120,7 @@ export default function TelaAtivacaoLicenca({ onActivated }) {
                   : status === 'success'
                     ? 'border-emerald-400 focus:border-emerald-500 focus:ring-emerald-500/30'
                     : 'border-slate-300 focus:border-blue-500 focus:ring-blue-500/30',
+                shake && 'shake-field',
               )}
             />
             {status === 'error' && (
@@ -164,12 +168,12 @@ export default function TelaAtivacaoLicenca({ onActivated }) {
               className="flex w-full items-center justify-center gap-1.5 text-slate-400 hover:text-slate-600"
             >
               <LifeBuoy size={12} />
-              Ainda não tem uma chave? Ver identificador desta máquina (HWID)
+              Informações do Sistema
             </button>
           ) : (
             <div className="mx-auto max-w-xs">
               <p className="text-center text-[11px] text-slate-400">
-                Envie este código ao suporte para receber sua Chave de Licença Serial.
+                Identificador técnico desta instalação. Envie este código ao suporte apenas se solicitado.
               </p>
               <div className="mt-1.5 flex items-center gap-2">
                 <div className="flex-1 truncate rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-center font-mono text-xs font-semibold tracking-wide text-slate-700">

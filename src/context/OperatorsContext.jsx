@@ -1,17 +1,11 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-
-const STORAGE_KEY = 'pdv-sistema-2026:operators'
+import { usuariosRepo } from '../services/db'
 
 export const ROLE_META = {
   admin: {
-    label: 'Administrador',
+    label: 'Gerente/Admin',
     badge: 'bg-violet-50 text-violet-700',
     avatar: 'bg-violet-100 text-violet-700',
-  },
-  gerente: {
-    label: 'Gerente',
-    badge: 'bg-blue-50 text-blue-700',
-    avatar: 'bg-blue-100 text-blue-700',
   },
   operador: {
     label: 'Operador de Caixa',
@@ -20,92 +14,125 @@ export const ROLE_META = {
   },
 }
 
-// Papéis com autoridade de supervisor — dispensados do PIN de autorização
-// (ModalAutorizacaoGerente) e das travas de 'Relatórios'/'Logs & Diagnóstico'
-// (ver ManagerAuthContext/AccessControlContext): eles JÁ SÃO a aprovação de
-// nível superior que o PIN existe para exigir de um 'operador' comum.
-export const SUPERVISOR_ROLES = ['admin', 'gerente']
+// Papel com autoridade de supervisor — dispensado do PIN de autorização
+// (ModalAutorizacaoGerente) e das travas de 'Relatórios'/'Configurações'/
+// 'Funcionários'/'Logs' (ver ManagerAuthContext/AccessControlContext): quem
+// está logado como 'admin' JÁ É a aprovação de nível superior que o PIN
+// existe para exigir de um 'operador' comum.
+export const SUPERVISOR_ROLES = ['admin']
 
 export function isSupervisorRole(operator) {
   return !!operator && SUPERVISOR_ROLES.includes(operator.role)
 }
 
-// Operador Administrador padrão do sistema — credencial de fábrica (PIN 1234),
-// também usada pelo AccessControlContext para liberar o Modo Mestre.
-export const DEFAULT_OPERATORS = [
-  {
-    id: 1,
-    name: 'Gerente Admin',
-    username: 'gerente.admin',
-    role: 'admin',
-    pin: '1234',
-    status: 'ativo',
-    lastAccess: '2026-08-04T08:12:00',
-  },
-  {
-    id: 2,
-    name: 'Ana Beatriz Souza',
-    username: 'ana.souza',
-    role: 'admin',
-    pin: '9012',
-    status: 'ativo',
-    lastAccess: '2026-08-04T08:12:00',
-  },
-  {
-    id: 3,
-    name: 'Carlos Eduardo Lima',
-    username: 'carlos.lima',
-    role: 'gerente',
-    pin: '2345',
-    status: 'ativo',
-    lastAccess: '2026-08-03T19:45:00',
-  },
-  {
-    id: 4,
-    name: 'Fernanda Alves',
-    username: 'fernanda.alves',
-    role: 'operador',
-    pin: '3456',
-    status: 'inativo',
-    lastAccess: '2026-07-28T14:30:00',
-  },
-  {
-    id: 5,
-    name: 'João Pedro Martins',
-    username: 'joao.martins',
-    role: 'operador',
-    pin: '4567',
-    status: 'ativo',
-    lastAccess: '2026-08-04T07:50:00',
-  },
-]
-
-function loadInitialOperators() {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (!raw) return DEFAULT_OPERATORS
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_OPERATORS
-  } catch {
-    return DEFAULT_OPERATORS
-  }
+// Operador Administrador padrão do sistema — usado só pelo AccessControlContext
+// para rotular a sessão liberada ao alternar para o Modo Mestre com o PIN do
+// Gerente/Admin (não é um usuário real do cadastro).
+export const DEFAULT_ADMIN_OPERATOR = {
+  name: 'Gerente Admin',
+  role: 'admin',
 }
 
 const OperatorsContext = createContext(null)
 
+/**
+ * Cadastro de usuários do sistema (Controle de Acesso e Perfis — Gerente/Admin
+ * vs. Operador), persistido no SQLite local via `usuariosRepo` (tabela
+ * `usuarios`). Carrega a lista uma vez no boot; toda operação de escrita
+ * (criar, editar, trocar PIN, ativar/inativar, excluir) grava no banco e
+ * atualiza o estado local com o retorno do repositório, para nunca ficar
+ * dessincronizado do que foi persistido de fato.
+ *
+ * `needsSetup` fica `true` quando o cadastro está vazio (nenhum usuário
+ * ainda) — dispara a tela de Primeiro Acesso ("Criar Usuário Administrador"),
+ * ver SetupAdminScreen.jsx/App.jsx.
+ */
 export function OperatorsProvider({ children }) {
-  const [operators, setOperators] = useState(loadInitialOperators)
+  const [operators, setOperatorsState] = useState([])
+  const [isLoaded, setIsLoaded] = useState(false)
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(operators))
-  }, [operators])
+    let cancelled = false
+    usuariosRepo
+      .list()
+      .then((rows) => {
+        if (!cancelled) setOperatorsState(rows)
+      })
+      .catch((error) => {
+        console.error('[operators] Falha ao carregar usuários do sistema:', error)
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoaded(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function refreshOperators() {
+    const rows = await usuariosRepo.list()
+    setOperatorsState(rows)
+    return rows
+  }
+
+  /** Cria o primeiro usuário (Gerente/Admin) ou qualquer novo funcionário. */
+  async function createOperator(usuario) {
+    const created = await usuariosRepo.create(usuario)
+    setOperatorsState((prev) => [...prev, created])
+    return created
+  }
+
+  async function updateOperator(id, usuario) {
+    const updated = await usuariosRepo.update(id, usuario)
+    if (updated) setOperatorsState((prev) => prev.map((item) => (item.id === id ? updated : item)))
+    return updated
+  }
+
+  async function updateOperatorPin(id, pin) {
+    const updated = await usuariosRepo.updatePin(id, pin)
+    if (updated) setOperatorsState((prev) => prev.map((item) => (item.id === id ? updated : item)))
+    return updated
+  }
+
+  async function setOperatorStatus(id, status) {
+    const updated = await usuariosRepo.setAtivo(id, status === 'ativo')
+    if (updated) setOperatorsState((prev) => prev.map((item) => (item.id === id ? updated : item)))
+    return updated
+  }
+
+  async function removeOperator(id) {
+    await usuariosRepo.remove(id)
+    setOperatorsState((prev) => prev.filter((item) => item.id !== id))
+  }
+
+  async function touchLastAccess(id) {
+    await usuariosRepo.touchLastAccess(id)
+    const now = new Date().toISOString()
+    setOperatorsState((prev) => prev.map((item) => (item.id === id ? { ...item, lastAccess: now } : item)))
+  }
 
   function findByPin(pin) {
     return operators.find((operator) => operator.pin === pin && operator.status === 'ativo') ?? null
   }
 
+  const needsSetup = isLoaded && operators.length === 0
+
   return (
-    <OperatorsContext.Provider value={{ operators, setOperators, findByPin }}>
+    <OperatorsContext.Provider
+      value={{
+        operators,
+        isLoaded,
+        needsSetup,
+        refreshOperators,
+        createOperator,
+        updateOperator,
+        updateOperatorPin,
+        setOperatorStatus,
+        removeOperator,
+        touchLastAccess,
+        findByPin,
+      }}
+    >
       {children}
     </OperatorsContext.Provider>
   )

@@ -180,6 +180,22 @@ export const TABLES = {
     columns: ['chave_rsa', 'hwid_maquina', 'data_ativacao', 'status'],
     defaults: () => ({ chave_rsa: '', hwid_maquina: '', data_ativacao: null, status: 'inativa' }),
   },
+  // Controle de Acesso e Perfis (v1.0.5): cadastro de usuários do sistema —
+  // `perfil` só admite 'admin' (Gerente/Dono, acesso total) ou 'operador'
+  // (acesso restrito à Frente de Caixa/consultas básicas). Tabela vazia por
+  // padrão: `usuariosRepo.count() === 0` dispara a tela de Primeiro Acesso
+  // ("Criar Usuário Administrador") — ver OperatorsContext.jsx.
+  usuarios: {
+    columns: ['nome', 'pin_senha', 'perfil', 'ativo', 'criado_em', 'ultimo_acesso'],
+    defaults: () => ({
+      nome: '',
+      pin_senha: '',
+      perfil: 'operador',
+      ativo: 1,
+      criado_em: new Date().toISOString(),
+      ultimo_acesso: null,
+    }),
+  },
   // Etapa 4: Delivery, Trocas e Financeiro migrados de dados mockados para o
   // banco local — cada tela ganha sua própria tabela de domínio, seguindo o
   // mesmo padrão do restante do schema (ver migration `create_delivery_
@@ -1683,5 +1699,78 @@ export const logsSistemaRepo = {
       criado_em: new Date().toISOString(),
     })
     return rowToLogSistema(row)
+  },
+}
+
+function rowToUsuario(row) {
+  return {
+    id: row.id,
+    name: row.nome ?? '',
+    role: row.perfil === 'admin' ? 'admin' : 'operador',
+    pin: row.pin_senha ?? '',
+    status: Number(row.ativo ?? 1) === 1 ? 'ativo' : 'inativo',
+    createdAt: row.criado_em,
+    lastAccess: row.ultimo_acesso,
+  }
+}
+
+function usuarioToRow(usuario) {
+  return {
+    nome: usuario.name?.trim() ?? '',
+    pin_senha: usuario.pin ?? '',
+    perfil: usuario.role === 'admin' ? 'admin' : 'operador',
+    ativo: usuario.status === 'inativo' ? 0 : 1,
+  }
+}
+
+/**
+ * Controle de Acesso e Perfis (v1.0.5): cadastro de usuários do sistema,
+ * persistido no SQLite local — substitui o cadastro de demonstração antes
+ * mantido só em localStorage (ver OperatorsContext.jsx). Só dois perfis
+ * existem: 'admin' (Gerente/Dono — acesso total: relatórios, financeiro,
+ * custos, configurações) e 'operador' (acesso restrito — Frente de Caixa,
+ * consultas básicas e vendas).
+ */
+export const usuariosRepo = {
+  async list() {
+    const rows = await listRows('usuarios', { orderBy: 'nome' })
+    return rows.map(rowToUsuario)
+  },
+  /** Quantidade de usuários cadastrados — 0 dispara a tela de Primeiro Acesso. */
+  async count() {
+    const rows = await listRows('usuarios')
+    return rows.length
+  },
+  async create(usuario) {
+    const row = await insertRow('usuarios', {
+      ...usuarioToRow(usuario),
+      criado_em: new Date().toISOString(),
+      ultimo_acesso: null,
+    })
+    return rowToUsuario(row)
+  },
+  async update(id, usuario) {
+    const row = await updateRow('usuarios', id, usuarioToRow(usuario))
+    return row ? rowToUsuario(row) : null
+  },
+  async updatePin(id, pin) {
+    const row = await updateRow('usuarios', id, { pin_senha: pin })
+    return row ? rowToUsuario(row) : null
+  },
+  async setAtivo(id, ativo) {
+    const row = await updateRow('usuarios', id, { ativo: ativo ? 1 : 0 })
+    return row ? rowToUsuario(row) : null
+  },
+  async remove(id) {
+    await deleteRow('usuarios', id)
+  },
+  async touchLastAccess(id) {
+    await updateRow('usuarios', id, { ultimo_acesso: new Date().toISOString() })
+  },
+  /** Usuário ativo cujo PIN bate com o informado — usado no Login do Operador (ver LoginScreen.jsx). */
+  async findByPin(pin) {
+    const rows = await listRows('usuarios', { where: { pin_senha: pin } })
+    const row = rows.find((item) => Number(item.ativo ?? 1) === 1)
+    return row ? rowToUsuario(row) : null
   },
 }
