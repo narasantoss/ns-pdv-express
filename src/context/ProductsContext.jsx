@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { produtosRepo } from '../services/db'
+import { useNetworkSync } from './NetworkSyncContext'
 
 const CATEGORIES_STORAGE_KEY = 'pdv-sistema-2026:categories'
 
@@ -39,6 +40,7 @@ function loadInitialCategories() {
 const ProductsContext = createContext(null)
 
 export function ProductsProvider({ children }) {
+  const { reconnectSignal } = useNetworkSync()
   const [products, setProducts] = useState([])
   const [categoryList, setCategoryList] = useState(loadInitialCategories)
   const [isLoaded, setIsLoaded] = useState(false)
@@ -48,13 +50,25 @@ export function ProductsProvider({ children }) {
   // (UPDATE) e quais sumiram (DELETE).
   const syncedSnapshotRef = useRef(new Map())
   const isApplyingRemoteIdsRef = useRef(false)
+  // `true` assim que o primeiro `produtosRepo.list()` bem-sucedido resolve —
+  // usado para não recarregar (e sobrescrever edições locais em andamento)
+  // toda vez que a rede pisca depois disso; só serve para destravar o caso em
+  // que a carga inicial falhou (ver `reconnectSignal` abaixo).
+  const hasLoadedOnceRef = useRef(false)
 
   useEffect(() => {
+    // No modo Balcão, se a carga inicial falhar (ex.: o app abriu antes do
+    // Mestre estar de pé), `reconnectSignal` muda a cada reconexão detectada
+    // por NetworkSyncContext e este efeito roda de novo — sem isso, a lista
+    // de produtos ficava vazia para sempre, mesmo com o Mestre já respondendo,
+    // porque este efeito só rodava uma vez no mount.
+    if (hasLoadedOnceRef.current) return
     let cancelled = false
     produtosRepo
       .list()
       .then((list) => {
         if (cancelled) return
+        hasLoadedOnceRef.current = true
         syncedSnapshotRef.current = new Map(list.map((product) => [product.id, product]))
         setProducts(list)
         setCategoryList((prev) => (prev.length > 0 ? prev : buildInitialCategoryList(list)))
@@ -74,7 +88,7 @@ export function ProductsProvider({ children }) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reconnectSignal])
 
   useEffect(() => {
     window.localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(categoryList))

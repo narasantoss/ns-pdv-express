@@ -29,7 +29,27 @@
 // e `masterClient.js` formam um ciclo — ambos só usam essas referências
 // dentro de funções (nunca durante a avaliação inicial do módulo), o que o
 // ESM resolve normalmente via "live bindings".
-import { fetchProdutosFromMaster, fetchClientesFromMaster, postVendaToMaster } from './masterClient'
+import {
+  fetchProdutosFromMaster,
+  createProdutoOnMaster,
+  updateProdutoOnMaster,
+  removeProdutoOnMaster,
+  adjustProdutoStockOnMaster,
+  fetchClientesFromMaster,
+  createClienteOnMaster,
+  updateClienteOnMaster,
+  removeClienteOnMaster,
+  registerClienteMovementOnMaster,
+  postVendaToMaster,
+  fetchVendasFromMaster,
+  voidVendaOnMaster,
+  settleVendaOnMaster,
+  fetchVouchersFromMaster,
+  createVoucherOnMaster,
+  markVoucherUsedOnMaster,
+  fetchTrocasLogFromMaster,
+  createTrocaLogOnMaster,
+} from './masterClient'
 
 const DB_URL = 'sqlite:pdv_express.db'
 const LS_PREFIX = 'pdv-express-db:'
@@ -752,18 +772,44 @@ export const produtosRepo = {
     return rows.map(rowToProduct)
   },
   async create(product) {
-    const row = await insertRow('produtos', productToRow(product))
-    return rowToProduct(row)
+    const row = productToRow(product)
+    const target = await getLanTarget()
+    if (target) {
+      const result = await createProdutoOnMaster(target, row)
+      if (result.ok) return result.data
+      throw new Error(`Não foi possível criar o produto no Caixa Principal (${target}): ${result.reason}`)
+    }
+    const created = await insertRow('produtos', row)
+    return rowToProduct(created)
   },
   async update(id, product) {
-    const row = await updateRow('produtos', id, productToRow(product))
-    return row ? rowToProduct(row) : null
+    const row = productToRow(product)
+    const target = await getLanTarget()
+    if (target) {
+      const result = await updateProdutoOnMaster(target, id, row)
+      if (result.ok) return result.data
+      throw new Error(`Não foi possível atualizar o produto no Caixa Principal (${target}): ${result.reason}`)
+    }
+    const updated = await updateRow('produtos', id, row)
+    return updated ? rowToProduct(updated) : null
   },
   async remove(id) {
+    const target = await getLanTarget()
+    if (target) {
+      const result = await removeProdutoOnMaster(target, id)
+      if (!result.ok) throw new Error(`Não foi possível remover o produto no Caixa Principal (${target}): ${result.reason}`)
+      return
+    }
     await deleteRow('produtos', id)
   },
   /** Ajusta o estoque de um produto por delta (negativo em vendas, positivo em estornos/entradas/trocas). Retorna o produto já no formato de app (camelCase). */
   async adjustStock(id, deltaQuantidade) {
+    const target = await getLanTarget()
+    if (target) {
+      const result = await adjustProdutoStockOnMaster(target, id, deltaQuantidade, null)
+      if (result.ok) return result.data
+      throw new Error(`Não foi possível ajustar o estoque no Caixa Principal (${target}): ${result.reason}`)
+    }
     const row = await getRowById('produtos', id)
     if (!row) return null
     const novoEstoque = Number(row.estoque_atual ?? 0) + deltaQuantidade
@@ -783,6 +829,12 @@ export const produtosRepo = {
    * agregado do produto.
    */
   async adjustVariationStock(id, variationKey, deltaQuantidade) {
+    const target = await getLanTarget()
+    if (target) {
+      const result = await adjustProdutoStockOnMaster(target, id, deltaQuantidade, variationKey)
+      if (result.ok) return result.data
+      throw new Error(`Não foi possível ajustar o estoque no Caixa Principal (${target}): ${result.reason}`)
+    }
     const row = await getRowById('produtos', id)
     if (!row) return null
     const extra = parseJsonField(row.dados_extra, {})
@@ -865,18 +917,44 @@ export const clientesRepo = {
     return rows.map(rowToClient)
   },
   async create(client) {
-    const row = await insertRow('clientes', clientToRow(client))
-    return rowToClient(row)
+    const row = clientToRow(client)
+    const target = await getLanTarget()
+    if (target) {
+      const result = await createClienteOnMaster(target, row)
+      if (result.ok) return result.data
+      throw new Error(`Não foi possível criar o cliente no Caixa Principal (${target}): ${result.reason}`)
+    }
+    const created = await insertRow('clientes', row)
+    return rowToClient(created)
   },
   async update(id, client) {
-    const row = await updateRow('clientes', id, clientToRow(client))
-    return row ? rowToClient(row) : null
+    const row = clientToRow(client)
+    const target = await getLanTarget()
+    if (target) {
+      const result = await updateClienteOnMaster(target, id, row)
+      if (result.ok) return result.data
+      throw new Error(`Não foi possível atualizar o cliente no Caixa Principal (${target}): ${result.reason}`)
+    }
+    const updated = await updateRow('clientes', id, row)
+    return updated ? rowToClient(updated) : null
   },
   async remove(id) {
+    const target = await getLanTarget()
+    if (target) {
+      const result = await removeClienteOnMaster(target, id)
+      if (!result.ok) throw new Error(`Não foi possível remover o cliente no Caixa Principal (${target}): ${result.reason}`)
+      return
+    }
     await deleteRow('clientes', id)
   },
   /** Lança uma compra fiado ou um pagamento, ajustando `saldo_devedor` e o histórico. */
   async registerMovement(id, { type, amount, description, date }) {
+    const target = await getLanTarget()
+    if (target) {
+      const result = await registerClienteMovementOnMaster(target, id, { type, amount, description })
+      if (result.ok) return result.data
+      throw new Error(`Não foi possível lançar o movimento no Caixa Principal (${target}): ${result.reason}`)
+    }
     const row = await getRowById('clientes', id)
     if (!row) return null
     const historico = parseJsonField(row.historico, [])
@@ -948,6 +1026,12 @@ export function rowToVenda(row) {
 
 export const vendasRepo = {
   async list() {
+    const target = await getLanTarget()
+    if (target) {
+      const result = await fetchVendasFromMaster(target)
+      if (result.ok) return result.data.map(({ venda }) => venda)
+      throw new Error(`Não foi possível carregar as vendas do Caixa Principal (${target}): ${result.reason}`)
+    }
     const rows = await listRows('vendas', { orderBy: 'data_venda desc' })
     return rows.map(rowToVenda)
   },
@@ -962,6 +1046,20 @@ export const vendasRepo = {
    * usado por `src/lib/database.js` para as comandas.
    */
   async listWithItems(getProductName) {
+    const target = await getLanTarget()
+    if (target) {
+      const result = await fetchVendasFromMaster(target)
+      if (!result.ok) {
+        throw new Error(`Não foi possível carregar as vendas do Caixa Principal (${target}): ${result.reason}`)
+      }
+      return result.data.map(({ venda, itens }) => ({
+        ...venda,
+        itens: itens.map((item) => ({
+          ...item,
+          nome: getProductName?.(item.produtoId) ?? `Produto #${item.produtoId}`,
+        })),
+      }))
+    }
     const [vendaRows, itemRows] = await Promise.all([
       listRows('vendas', { orderBy: 'data_venda desc' }),
       listRows('itens_venda'),
@@ -1061,6 +1159,12 @@ export const vendasRepo = {
    * motivo informado pelo operador) para auditoria no Financeiro/Histórico.
    */
   async voidSale(id, reason) {
+    const target = await getLanTarget()
+    if (target) {
+      const result = await voidVendaOnMaster(target, id, reason)
+      if (result.ok) return result.data
+      throw new Error(`Não foi possível estornar a venda no Caixa Principal (${target}): ${result.reason}`)
+    }
     const vendaRow = await getRowById('vendas', id)
     if (!vendaRow) return null
 
@@ -1154,6 +1258,12 @@ export const vendasRepo = {
    * bucket de pagamento correto no Financeiro/Fechamento de Caixa.
    */
   async settlePayment(id, paymentMethod) {
+    const target = await getLanTarget()
+    if (target) {
+      const result = await settleVendaOnMaster(target, id, paymentMethod)
+      if (result.ok) return result.data
+      throw new Error(`Não foi possível quitar a venda no Caixa Principal (${target}): ${result.reason}`)
+    }
     const vendaRow = await getRowById('vendas', id)
     if (!vendaRow) return null
     if (vendaRow.forma_pagamento !== 'crediario') {
@@ -1553,11 +1663,17 @@ function rowToVoucher(row) {
 
 export const vouchersRepo = {
   async list() {
+    const target = await getLanTarget()
+    if (target) {
+      const result = await fetchVouchersFromMaster(target)
+      if (result.ok) return result.data.map(rowToVoucher)
+      throw new Error(`Não foi possível carregar os vales-crédito do Caixa Principal (${target}): ${result.reason}`)
+    }
     const rows = await listRows('vales_credito', { orderBy: 'emitido_em desc' })
     return rows.map(rowToVoucher)
   },
   async create(voucher) {
-    const row = await insertRow('vales_credito', {
+    const row = {
       codigo: voucher.code,
       cliente_nome: voucher.customerName ?? '',
       valor: Number(voucher.value ?? 0),
@@ -1565,10 +1681,23 @@ export const vouchersRepo = {
       expira_em: voucher.expiresAt,
       usado_em: voucher.usedAt ?? null,
       status: voucher.status ?? 'ativo',
-    })
-    return rowToVoucher(row)
+    }
+    const target = await getLanTarget()
+    if (target) {
+      const result = await createVoucherOnMaster(target, row)
+      if (result.ok) return rowToVoucher(result.data)
+      throw new Error(`Não foi possível emitir o vale-crédito no Caixa Principal (${target}): ${result.reason}`)
+    }
+    const created = await insertRow('vales_credito', row)
+    return rowToVoucher(created)
   },
   async markUsed(id) {
+    const target = await getLanTarget()
+    if (target) {
+      const result = await markVoucherUsedOnMaster(target, id)
+      if (result.ok) return result.data ? rowToVoucher(result.data) : null
+      throw new Error(`Não foi possível usar o vale-crédito no Caixa Principal (${target}): ${result.reason}`)
+    }
     const row = await updateRow('vales_credito', id, { status: 'utilizado', usado_em: new Date().toISOString().slice(0, 10) })
     return row ? rowToVoucher(row) : null
   },
@@ -1661,18 +1790,31 @@ function rowToTrocaLog(row) {
 /** Registro simples de auditoria de vales-crédito emitidos e estornos em dinheiro/PIX confirmados em Trocas. */
 export const trocasLogRepo = {
   async list() {
+    const target = await getLanTarget()
+    if (target) {
+      const result = await fetchTrocasLogFromMaster(target)
+      if (result.ok) return result.data.map(rowToTrocaLog)
+      throw new Error(`Não foi possível carregar o log de trocas do Caixa Principal (${target}): ${result.reason}`)
+    }
     const rows = await listRows('trocas_log', { orderBy: 'criado_em desc' })
     return rows.map(rowToTrocaLog)
   },
   async create(entry) {
-    const row = await insertRow('trocas_log', {
+    const row = {
       tipo: entry.type,
       cliente_nome: entry.customerName ?? '',
       valor: Number(entry.value ?? 0),
       itens: JSON.stringify(entry.items ?? []),
       criado_em: new Date().toISOString(),
-    })
-    return rowToTrocaLog(row)
+    }
+    const target = await getLanTarget()
+    if (target) {
+      const result = await createTrocaLogOnMaster(target, row)
+      if (result.ok) return rowToTrocaLog(result.data)
+      throw new Error(`Não foi possível registrar a troca no Caixa Principal (${target}): ${result.reason}`)
+    }
+    const created = await insertRow('trocas_log', row)
+    return rowToTrocaLog(created)
   },
 }
 

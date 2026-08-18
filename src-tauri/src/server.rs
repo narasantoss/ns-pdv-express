@@ -15,9 +15,9 @@
 // `open_conn` liga WAL + busy_timeout, para o SQLite tolerar bem os dois
 // lados escrevendo/lendo concorrentemente no mesmo arquivo.
 use axum::{
-  extract::State,
+  extract::{Path as AxumPath, State},
   http::StatusCode,
-  routing::{get, post},
+  routing::{get, post, put},
   Json, Router,
 };
 use chrono::SecondsFormat;
@@ -34,7 +34,7 @@ use tower_http::cors::CorsLayer;
 
 const DB_FILE_NAME: &str = "pdv_express.db";
 const PORT: u16 = 3333;
-const VERSAO: &str = "1.0.7";
+const VERSAO: &str = "1.0.8";
 
 static SERVER_SHUTDOWN: OnceLock<Mutex<Option<oneshot::Sender<()>>>> = OnceLock::new();
 static SERVER_RUNNING: AtomicBool = AtomicBool::new(false);
@@ -69,9 +69,18 @@ pub async fn start_local_server(app: tauri::AppHandle) -> Result<u16, String> {
   let state = AppState { db_path };
   let router = Router::new()
     .route("/api/ping", get(ping))
-    .route("/api/produtos", get(get_produtos))
-    .route("/api/clientes", get(get_clientes))
-    .route("/api/vendas", post(post_vendas))
+    .route("/api/produtos", get(get_produtos).post(post_produtos))
+    .route("/api/produtos/{id}", put(put_produtos).delete(delete_produtos))
+    .route("/api/produtos/{id}/ajuste-estoque", post(post_ajuste_estoque_produto))
+    .route("/api/clientes", get(get_clientes).post(post_clientes))
+    .route("/api/clientes/{id}", put(put_clientes).delete(delete_clientes))
+    .route("/api/clientes/{id}/movimento", post(post_movimento_cliente))
+    .route("/api/vendas", get(get_vendas).post(post_vendas))
+    .route("/api/vendas/{id}/estorno", post(post_estorno_venda))
+    .route("/api/vendas/{id}/quitar", post(post_quitar_venda))
+    .route("/api/vouchers", get(get_vouchers).post(post_vouchers))
+    .route("/api/vouchers/{id}/usar", post(post_voucher_usar))
+    .route("/api/trocas", get(get_trocas).post(post_trocas))
     .route("/api/comandas", get(get_comandas).post(post_comandas))
     .layer(CorsLayer::permissive())
     .with_state(state);
@@ -212,6 +221,248 @@ async fn get_clientes(State(state): State<AppState>) -> Result<Json<Value>, (Sta
 }
 
 // ---------------------------------------------------------------------------
+// POST/PUT/DELETE /api/produtos[/:id] — CRUD de produto, espelhando
+// `productToRow`/`produtosRepo.create|update|remove` (src/services/db.js).
+// O payload chega já em snake_case (mesmo formato de `productToRow`), então o
+// struct abaixo não precisa de `rename_all`.
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct ProdutoPayload {
+  codigo_barras: String,
+  nome: String,
+  categoria: String,
+  preco_custo: f64,
+  preco_venda: f64,
+  estoque_atual: f64,
+  estoque_minimo: f64,
+  unidade_medida: String,
+  pesavel: i64,
+  codigo_balanca: String,
+  dados_extra: String,
+}
+
+async fn post_produtos(
+  State(state): State<AppState>,
+  Json(payload): Json<ProdutoPayload>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+  let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+    let conn = open_conn(&state.db_path)?;
+    conn.execute(
+      "INSERT INTO produtos (codigo_barras, nome, categoria, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade_medida, pesavel, codigo_balanca, dados_extra)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+      rusqlite::params![
+        payload.codigo_barras,
+        payload.nome,
+        payload.categoria,
+        payload.preco_custo,
+        payload.preco_venda,
+        payload.estoque_atual,
+        payload.estoque_minimo,
+        payload.unidade_medida,
+        payload.pesavel,
+        payload.codigo_balanca,
+        payload.dados_extra,
+      ],
+    )
+    .map_err(|error| error.to_string())?;
+    let id = conn.last_insert_rowid();
+    query_one_map(&conn, "SELECT * FROM produtos WHERE id = ?1", rusqlite::params![id])
+  })
+  .await
+  .map_err(|error| internal_error(error.to_string()))?;
+  result.map(Json).map_err(internal_error)
+}
+
+async fn put_produtos(
+  State(state): State<AppState>,
+  AxumPath(id): AxumPath<i64>,
+  Json(payload): Json<ProdutoPayload>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+  let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+    let conn = open_conn(&state.db_path)?;
+    conn.execute(
+      "UPDATE produtos SET codigo_barras = ?1, nome = ?2, categoria = ?3, preco_custo = ?4, preco_venda = ?5,
+       estoque_atual = ?6, estoque_minimo = ?7, unidade_medida = ?8, pesavel = ?9, codigo_balanca = ?10, dados_extra = ?11
+       WHERE id = ?12",
+      rusqlite::params![
+        payload.codigo_barras,
+        payload.nome,
+        payload.categoria,
+        payload.preco_custo,
+        payload.preco_venda,
+        payload.estoque_atual,
+        payload.estoque_minimo,
+        payload.unidade_medida,
+        payload.pesavel,
+        payload.codigo_balanca,
+        payload.dados_extra,
+        id,
+      ],
+    )
+    .map_err(|error| error.to_string())?;
+    query_one_map(&conn, "SELECT * FROM produtos WHERE id = ?1", rusqlite::params![id])
+  })
+  .await
+  .map_err(|error| internal_error(error.to_string()))?;
+  result.map(Json).map_err(internal_error)
+}
+
+async fn delete_produtos(State(state): State<AppState>, AxumPath(id): AxumPath<i64>) -> Result<StatusCode, (StatusCode, String)> {
+  tokio::task::spawn_blocking(move || -> Result<(), String> {
+    let conn = open_conn(&state.db_path)?;
+    conn
+      .execute("DELETE FROM produtos WHERE id = ?1", rusqlite::params![id])
+      .map_err(|error| error.to_string())?;
+    Ok(())
+  })
+  .await
+  .map_err(|error| internal_error(error.to_string()))?
+  .map_err(internal_error)?;
+  Ok(StatusCode::OK)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AjusteEstoquePayload {
+  delta_quantidade: f64,
+  variation_code: Option<String>,
+}
+
+/// Ajusta o estoque (agregado ou de uma variação) de um produto dentro de uma
+/// transação — mesma lógica de `adjust_stock`, usada tanto aqui (chamada
+/// direta do Balcão via `produtosRepo.adjustStock`/`adjustVariationStock`)
+/// quanto internamente por `handle_post_vendas`.
+async fn post_ajuste_estoque_produto(
+  State(state): State<AppState>,
+  AxumPath(id): AxumPath<i64>,
+  Json(payload): Json<AjusteEstoquePayload>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+  let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+    let mut conn = open_conn(&state.db_path)?;
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+    let produto = adjust_stock(&tx, id, payload.delta_quantidade, payload.variation_code.as_deref())?;
+    tx.commit().map_err(|error| error.to_string())?;
+    Ok(produto.unwrap_or(Value::Null))
+  })
+  .await
+  .map_err(|error| internal_error(error.to_string()))?;
+  result.map(Json).map_err(internal_error)
+}
+
+// ---------------------------------------------------------------------------
+// POST/PUT/DELETE /api/clientes[/:id] — CRUD de cliente, espelhando
+// `clientToRow`/`clientesRepo.create|update|remove`.
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct ClientePayload {
+  nome: String,
+  telefone: String,
+  cpf_cnpj: String,
+  limite_credito: f64,
+  saldo_devedor: f64,
+  endereco: String,
+  historico: String,
+}
+
+async fn post_clientes(
+  State(state): State<AppState>,
+  Json(payload): Json<ClientePayload>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+  let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+    let conn = open_conn(&state.db_path)?;
+    conn.execute(
+      "INSERT INTO clientes (nome, telefone, cpf_cnpj, limite_credito, saldo_devedor, endereco, historico)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+      rusqlite::params![
+        payload.nome,
+        payload.telefone,
+        payload.cpf_cnpj,
+        payload.limite_credito,
+        payload.saldo_devedor,
+        payload.endereco,
+        payload.historico,
+      ],
+    )
+    .map_err(|error| error.to_string())?;
+    let id = conn.last_insert_rowid();
+    query_one_map(&conn, "SELECT * FROM clientes WHERE id = ?1", rusqlite::params![id])
+  })
+  .await
+  .map_err(|error| internal_error(error.to_string()))?;
+  result.map(Json).map_err(internal_error)
+}
+
+async fn put_clientes(
+  State(state): State<AppState>,
+  AxumPath(id): AxumPath<i64>,
+  Json(payload): Json<ClientePayload>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+  let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+    let conn = open_conn(&state.db_path)?;
+    conn.execute(
+      "UPDATE clientes SET nome = ?1, telefone = ?2, cpf_cnpj = ?3, limite_credito = ?4, saldo_devedor = ?5,
+       endereco = ?6, historico = ?7 WHERE id = ?8",
+      rusqlite::params![
+        payload.nome,
+        payload.telefone,
+        payload.cpf_cnpj,
+        payload.limite_credito,
+        payload.saldo_devedor,
+        payload.endereco,
+        payload.historico,
+        id,
+      ],
+    )
+    .map_err(|error| error.to_string())?;
+    query_one_map(&conn, "SELECT * FROM clientes WHERE id = ?1", rusqlite::params![id])
+  })
+  .await
+  .map_err(|error| internal_error(error.to_string()))?;
+  result.map(Json).map_err(internal_error)
+}
+
+async fn delete_clientes(State(state): State<AppState>, AxumPath(id): AxumPath<i64>) -> Result<StatusCode, (StatusCode, String)> {
+  tokio::task::spawn_blocking(move || -> Result<(), String> {
+    let conn = open_conn(&state.db_path)?;
+    conn
+      .execute("DELETE FROM clientes WHERE id = ?1", rusqlite::params![id])
+      .map_err(|error| error.to_string())?;
+    Ok(())
+  })
+  .await
+  .map_err(|error| internal_error(error.to_string()))?
+  .map_err(internal_error)?;
+  Ok(StatusCode::OK)
+}
+
+#[derive(Deserialize)]
+struct MovimentoPayload {
+  #[serde(rename = "type")]
+  tipo: String,
+  amount: f64,
+  description: String,
+}
+
+async fn post_movimento_cliente(
+  State(state): State<AppState>,
+  AxumPath(id): AxumPath<i64>,
+  Json(payload): Json<MovimentoPayload>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+  let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+    let mut conn = open_conn(&state.db_path)?;
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+    let cliente = register_movement(&tx, id, &payload.tipo, payload.amount, &payload.description)?;
+    tx.commit().map_err(|error| error.to_string())?;
+    Ok(cliente)
+  })
+  .await
+  .map_err(|error| internal_error(error.to_string()))?;
+  result.map(Json).map_err(internal_error)
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/vendas — grava a venda efetuada no Balcão, desconta o estoque
 // (produto agregado ou variação tamanho/cor, espelhando
 // `produtosRepo.adjustVariationStock` em src/services/db.js) e lança o débito
@@ -329,11 +580,269 @@ fn handle_post_vendas(db_path: &Path, payload: VendaPayload) -> Result<Value, St
   tx.commit().map_err(|error| error.to_string())?;
 
   Ok(json!({
+    "success": true,
+    "vendaId": venda_id,
     "venda": venda_row,
     "itens": itens_criados,
     "produtosAtualizados": produtos_atualizados,
     "clienteAtualizado": cliente_atualizado,
   }))
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/vendas — histórico completo de vendas com os itens embutidos
+// (mesmo dado que `vendasRepo.listWithItems` monta localmente), usado pelas
+// telas de Vendas do Dia, Financeiro e Trocas quando este PC está no modo
+// Balcão (ver `fetchVendasFromMaster` em src/services/masterClient.js).
+// ---------------------------------------------------------------------------
+
+async fn get_vendas(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, String)> {
+  let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+    let conn = open_conn(&state.db_path)?;
+    let vendas = query_all(&conn, "SELECT * FROM vendas ORDER BY data_venda DESC", rusqlite::params![])?;
+    let itens = query_all(&conn, "SELECT * FROM itens_venda", rusqlite::params![])?;
+
+    let mut result = Vec::with_capacity(vendas.len());
+    for mut venda in vendas {
+      let venda_id = venda.get("id").and_then(|v| v.as_i64());
+      let venda_itens: Vec<Value> = itens
+        .iter()
+        .filter(|item| item.get("venda_id").and_then(|v| v.as_i64()) == venda_id)
+        .cloned()
+        .collect();
+      if let Value::Object(ref mut map) = venda {
+        map.insert("itens".to_string(), Value::Array(venda_itens));
+      }
+      result.push(venda);
+    }
+    Ok(Value::Array(result))
+  })
+  .await
+  .map_err(|error| internal_error(error.to_string()))?;
+  result.map(Json).map_err(internal_error)
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/vendas/:id/estorno, POST /api/vendas/:id/quitar — estorno e
+// quitação de crediário de uma venda, espelhando `vendasRepo.voidSale`/
+// `vendasRepo.settlePayment` (src/services/db.js), usados pela tela de
+// Histórico de Vendas.
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct EstornoPayload {
+  #[serde(default)]
+  motivo: String,
+}
+
+async fn post_estorno_venda(
+  State(state): State<AppState>,
+  AxumPath(id): AxumPath<i64>,
+  Json(payload): Json<EstornoPayload>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+  let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+    let mut conn = open_conn(&state.db_path)?;
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+
+    let Some(venda_row) = query_one_map_opt(&tx, "SELECT * FROM vendas WHERE id = ?1", rusqlite::params![id])? else {
+      return Err("Venda não encontrada.".to_string());
+    };
+
+    let itens = query_all(&tx, "SELECT * FROM itens_venda WHERE venda_id = ?1", rusqlite::params![id])?;
+    let mut produtos_atualizados = Vec::new();
+    for item in &itens {
+      if let Some(produto_id) = item.get("produto_id").and_then(|v| v.as_i64()) {
+        let quantidade = item.get("quantidade").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let variacao_codigo = item.get("variacao_codigo").and_then(|v| v.as_str());
+        if let Some(produto) = adjust_stock(&tx, produto_id, quantidade, variacao_codigo)? {
+          produtos_atualizados.push(produto);
+        }
+      }
+    }
+
+    let cliente_id = venda_row.get("cliente_id").and_then(|v| v.as_i64());
+    let forma_pagamento = venda_row.get("forma_pagamento").and_then(|v| v.as_str()).unwrap_or("");
+    let total_liquido = venda_row.get("total_liquido").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let mut cliente_atualizado: Option<Value> = None;
+    if let (Some(cliente_id), "crediario") = (cliente_id, forma_pagamento) {
+      let descricao = format!("Estorno da Venda #{}", id);
+      cliente_atualizado = Some(register_movement(&tx, cliente_id, "pagamento", total_liquido, &descricao)?);
+    }
+
+    let dados_extra_str = venda_row.get("dados_extra").and_then(|v| v.as_str()).unwrap_or("{}").to_string();
+    let mut extra: Value = serde_json::from_str(&dados_extra_str).unwrap_or_else(|_| json!({}));
+    extra["estornoMotivo"] = json!(payload.motivo);
+    let extra_str = serde_json::to_string(&extra).map_err(|error| error.to_string())?;
+
+    tx.execute(
+      "UPDATE vendas SET status = 'estornada', dados_extra = ?1 WHERE id = ?2",
+      rusqlite::params![extra_str, id],
+    )
+    .map_err(|error| error.to_string())?;
+    let venda_atualizada = query_one_map(&tx, "SELECT * FROM vendas WHERE id = ?1", rusqlite::params![id])?;
+
+    tx.commit().map_err(|error| error.to_string())?;
+
+    Ok(json!({
+      "venda": venda_atualizada,
+      "produtosAtualizados": produtos_atualizados,
+      "clienteAtualizado": cliente_atualizado,
+    }))
+  })
+  .await
+  .map_err(|error| internal_error(error.to_string()))?;
+  result.map(Json).map_err(internal_error)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct QuitarPayload {
+  forma_pagamento: String,
+}
+
+async fn post_quitar_venda(
+  State(state): State<AppState>,
+  AxumPath(id): AxumPath<i64>,
+  Json(payload): Json<QuitarPayload>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+  let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+    let mut conn = open_conn(&state.db_path)?;
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+
+    let Some(venda_row) = query_one_map_opt(&tx, "SELECT * FROM vendas WHERE id = ?1", rusqlite::params![id])? else {
+      return Err("Venda não encontrada.".to_string());
+    };
+    let forma_pagamento_atual = venda_row.get("forma_pagamento").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+    if forma_pagamento_atual != "crediario" {
+      return Ok(json!({ "venda": venda_row, "clienteAtualizado": Value::Null }));
+    }
+
+    tx.execute(
+      "UPDATE vendas SET forma_pagamento = ?1 WHERE id = ?2",
+      rusqlite::params![payload.forma_pagamento, id],
+    )
+    .map_err(|error| error.to_string())?;
+
+    let cliente_id = venda_row.get("cliente_id").and_then(|v| v.as_i64());
+    let total_liquido = venda_row.get("total_liquido").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let cliente_atualizado = if let Some(cliente_id) = cliente_id {
+      let descricao = format!("Quitação da Venda #{}", id);
+      Some(register_movement(&tx, cliente_id, "pagamento", total_liquido, &descricao)?)
+    } else {
+      None
+    };
+
+    let venda_atualizada = query_one_map(&tx, "SELECT * FROM vendas WHERE id = ?1", rusqlite::params![id])?;
+    tx.commit().map_err(|error| error.to_string())?;
+
+    Ok(json!({ "venda": venda_atualizada, "clienteAtualizado": cliente_atualizado }))
+  })
+  .await
+  .map_err(|error| internal_error(error.to_string()))?;
+  result.map(Json).map_err(internal_error)
+}
+
+// ---------------------------------------------------------------------------
+// GET/POST /api/vouchers, POST /api/vouchers/:id/usar — vales-crédito
+// emitidos em Trocas, espelhando `vouchersRepo` (src/services/db.js).
+// ---------------------------------------------------------------------------
+
+async fn get_vouchers(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, String)> {
+  query_list(state.db_path, "SELECT * FROM vales_credito ORDER BY emitido_em DESC").await
+}
+
+#[derive(Deserialize)]
+struct VoucherPayload {
+  codigo: String,
+  cliente_nome: String,
+  valor: f64,
+  emitido_em: String,
+  expira_em: Option<String>,
+  usado_em: Option<String>,
+  status: String,
+}
+
+async fn post_vouchers(
+  State(state): State<AppState>,
+  Json(payload): Json<VoucherPayload>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+  let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+    let conn = open_conn(&state.db_path)?;
+    conn.execute(
+      "INSERT INTO vales_credito (codigo, cliente_nome, valor, emitido_em, expira_em, usado_em, status)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+      rusqlite::params![
+        payload.codigo,
+        payload.cliente_nome,
+        payload.valor,
+        payload.emitido_em,
+        payload.expira_em,
+        payload.usado_em,
+        payload.status,
+      ],
+    )
+    .map_err(|error| error.to_string())?;
+    let id = conn.last_insert_rowid();
+    query_one_map(&conn, "SELECT * FROM vales_credito WHERE id = ?1", rusqlite::params![id])
+  })
+  .await
+  .map_err(|error| internal_error(error.to_string()))?;
+  result.map(Json).map_err(internal_error)
+}
+
+async fn post_voucher_usar(State(state): State<AppState>, AxumPath(id): AxumPath<i64>) -> Result<Json<Value>, (StatusCode, String)> {
+  let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+    let conn = open_conn(&state.db_path)?;
+    let hoje = now_iso().get(0..10).unwrap_or("").to_string();
+    conn
+      .execute(
+        "UPDATE vales_credito SET status = 'utilizado', usado_em = ?1 WHERE id = ?2",
+        rusqlite::params![hoje, id],
+      )
+      .map_err(|error| error.to_string())?;
+    query_one_map(&conn, "SELECT * FROM vales_credito WHERE id = ?1", rusqlite::params![id])
+  })
+  .await
+  .map_err(|error| internal_error(error.to_string()))?;
+  result.map(Json).map_err(internal_error)
+}
+
+// ---------------------------------------------------------------------------
+// GET/POST /api/trocas — log de auditoria de Trocas (vales emitidos,
+// estornos em dinheiro/PIX), espelhando `trocasLogRepo`.
+// ---------------------------------------------------------------------------
+
+async fn get_trocas(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, String)> {
+  query_list(state.db_path, "SELECT * FROM trocas_log ORDER BY criado_em DESC").await
+}
+
+#[derive(Deserialize)]
+struct TrocaLogPayload {
+  tipo: String,
+  cliente_nome: String,
+  valor: f64,
+  itens: String,
+}
+
+async fn post_trocas(
+  State(state): State<AppState>,
+  Json(payload): Json<TrocaLogPayload>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+  let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+    let conn = open_conn(&state.db_path)?;
+    let criado_em = now_iso();
+    conn.execute(
+      "INSERT INTO trocas_log (tipo, cliente_nome, valor, itens, criado_em) VALUES (?1, ?2, ?3, ?4, ?5)",
+      rusqlite::params![payload.tipo, payload.cliente_nome, payload.valor, payload.itens, criado_em],
+    )
+    .map_err(|error| error.to_string())?;
+    let id = conn.last_insert_rowid();
+    query_one_map(&conn, "SELECT * FROM trocas_log WHERE id = ?1", rusqlite::params![id])
+  })
+  .await
+  .map_err(|error| internal_error(error.to_string()))?;
+  result.map(Json).map_err(internal_error)
 }
 
 /// Baixa `delta_quantidade` (negativo numa venda) do estoque do produto

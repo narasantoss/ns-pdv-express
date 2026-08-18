@@ -14,6 +14,10 @@ function isTauriRuntime() {
 export function isValidIp(value) {
   if (!value || !value.trim()) return false
   const trimmed = value.trim()
+  // 'localhost' é aceito como atalho para testes do Mestre/Balcão no mesmo PC
+  // (ex.: dois terminais do app rodando na mesma máquina) — equivalente a
+  // 127.0.0.1, que já batia na checagem de IPv4 abaixo.
+  if (trimmed.toLowerCase() === 'localhost') return true
   return (
     /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(trimmed) &&
     trimmed.split('.').every((part) => Number(part) >= 0 && Number(part) <= 255)

@@ -77,6 +77,7 @@ export default function ConfiguracoesMain() {
   const [ipDetectState, setIpDetectState] = useState('idle') // idle | detecting | ok | error
   const [copyState, setCopyState] = useState('idle') // idle | copied
   const [connTestState, setConnTestState] = useState('idle') // idle | testing | success | error
+  const [connTestReason, setConnTestReason] = useState('')
 
   const fileInputRef = useRef(null)
   const savedTimeoutRef = useRef(null)
@@ -116,10 +117,31 @@ export default function ConfiguracoesMain() {
 
   async function handleTestConnection() {
     setConnTestState('testing')
+    setConnTestReason('')
+    // Ping imediato em /api/ping (via masterClient, com timeout próprio que
+    // nunca trava a UI — ver DEFAULT_TIMEOUT_MS em src/services/masterClient.js).
     const result = await pingMaster(draft.masterIp)
-    setConnTestState(result.ok && result.data?.role === 'mestre' ? 'success' : 'error')
+    if (result.ok && result.data?.role === 'mestre') {
+      setConnTestState('success')
+    } else {
+      setConnTestState('error')
+      setConnTestReason(result.ok ? 'unexpected-role' : result.reason ?? 'unreachable')
+    }
     clearTimeout(connTestTimeoutRef.current)
     connTestTimeoutRef.current = setTimeout(() => setConnTestState('idle'), 4000)
+  }
+
+  const CONN_TEST_REASON_LABELS = {
+    timeout: 'O Caixa Principal não respondeu a tempo (rede lenta ou fora do ar).',
+    unreachable: 'Não foi possível alcançar esse endereço na rede.',
+    'invalid-ip': 'Endereço informado não é um IP/host válido.',
+    'unexpected-role': 'O endereço respondeu, mas o outro PC não está configurado como "PC Mestre / Caixa Principal".',
+  }
+
+  function connTestReasonLabel(reason) {
+    if (CONN_TEST_REASON_LABELS[reason]) return CONN_TEST_REASON_LABELS[reason]
+    if (reason?.startsWith('http-')) return `O Caixa Principal respondeu com erro (${reason.replace('http-', 'HTTP ')}).`
+    return 'Não foi possível alcançar o Caixa Principal nesse endereço.'
   }
 
   function handleExportProducts() {
@@ -569,12 +591,14 @@ export default function ConfiguracoesMain() {
                   </p>
                 )}
                 {connTestState === 'error' && (
-                  <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600">
-                    <XCircle size={13} />
-                    Não foi possível alcançar o Caixa Principal nesse endereço. Confira se os dois
-                    computadores estão no mesmo Wi-Fi/roteador, se o código foi digitado corretamente
-                    e se o outro PC está configurado como "PC Mestre / Caixa Principal".
-                  </p>
+                  <div className="mt-1.5 flex items-start gap-1.5 text-xs font-medium text-red-600">
+                    <XCircle size={13} className="mt-0.5 shrink-0" />
+                    <p>
+                      {connTestReasonLabel(connTestReason)} Confira se os dois computadores estão no
+                      mesmo Wi-Fi/roteador, se o endereço foi digitado corretamente e se o outro PC
+                      está configurado como "PC Mestre / Caixa Principal".
+                    </p>
+                  </div>
                 )}
               </div>
             )}

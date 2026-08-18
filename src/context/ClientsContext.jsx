@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { clientesRepo } from '../services/db'
+import { useNetworkSync } from './NetworkSyncContext'
 
 // Cadastro de clientes (crédito/fiado) compartilhado entre as telas de
 // Clientes e Vendas — antes desta etapa, cada uma mantinha sua própria cópia
@@ -16,18 +17,29 @@ import { clientesRepo } from '../services/db'
 const ClientsContext = createContext(null)
 
 export function ClientsProvider({ children }) {
+  const { reconnectSignal } = useNetworkSync()
   const [clients, setClients] = useState([])
   const [isLoaded, setIsLoaded] = useState(false)
 
   const syncedSnapshotRef = useRef(new Map())
   const isApplyingRemoteIdsRef = useRef(false)
+  // Ver o mesmo campo em ProductsContext: só permite recarregar quando a
+  // carga inicial ainda não tiver dado certo, para não sobrescrever edições
+  // locais em andamento a cada reconexão detectada depois disso.
+  const hasLoadedOnceRef = useRef(false)
 
   useEffect(() => {
+    // Ver o comentário equivalente em ProductsContext — `reconnectSignal`
+    // muda a cada reconexão com o Mestre (NetworkSyncContext) e reroda este
+    // efeito, destravando o caso em que o Balcão abriu antes do Mestre estar
+    // de pé e a carga inicial de clientes falhou.
+    if (hasLoadedOnceRef.current) return
     let cancelled = false
     clientesRepo
       .list()
       .then((list) => {
         if (cancelled) return
+        hasLoadedOnceRef.current = true
         syncedSnapshotRef.current = new Map(list.map((client) => [client.id, client]))
         setClients(list)
         setIsLoaded(true)
@@ -43,7 +55,7 @@ export function ClientsProvider({ children }) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reconnectSignal])
 
   useEffect(() => {
     if (!isLoaded || isApplyingRemoteIdsRef.current) return
