@@ -5,6 +5,12 @@ import { isTauriRuntime } from '../services/db'
 import { pingMaster } from '../services/masterClient'
 
 const PING_INTERVAL_MS = 5000
+// Fora do Tauri (`npm run dev` testando modo Balcão em duas abas, sem
+// servidor Rust nenhum de pé) não existe reconexão real a esperar — só
+// verifica de longe em longe, pra não encher o console/rede de tentativas
+// inúteis a cada 5s enquanto os repositórios em src/services/db.js já caem
+// para o storage local de desenvolvimento (ver `isDevLanFallback`).
+const DEV_PING_INTERVAL_MS = 20000
 
 const NetworkSyncContext = createContext(null)
 
@@ -70,7 +76,7 @@ export function NetworkSyncProvider({ children }) {
       wasOnlineRef.current = result.ok
     }
     check()
-    pollRef.current = setInterval(check, PING_INTERVAL_MS)
+    pollRef.current = setInterval(check, isTauriRuntime() ? PING_INTERVAL_MS : DEV_PING_INTERVAL_MS)
     return () => {
       cancelled = true
       clearInterval(pollRef.current)
@@ -80,10 +86,23 @@ export function NetworkSyncProvider({ children }) {
   const showReconnectBanner =
     isLoaded && settings.operationMode === 'balcao' && Boolean(settings.masterIp) && !masterOnline
 
+  // No app empacotado, Mestre inalcançável é uma falha real — banner de alerta
+  // pedindo pra aguardar a reconexão. No navegador (dev), os repositórios já
+  // caem para o storage local sozinhos (ver `isDevLanFallback` em
+  // src/services/db.js), então isto é só um aviso informativo — não trava
+  // nada, por isso o tom mais discreto (sem ícone piscando, sem "tentando").
+  const isDevFallback = !isTauriRuntime()
+
   return (
     <NetworkSyncContext.Provider value={{ masterOnline, reconnectSignal }}>
       {children}
-      {showReconnectBanner && (
+      {showReconnectBanner && isDevFallback && (
+        <div className="fixed inset-x-0 top-0 z-[200] flex items-center justify-center gap-2 bg-sky-600 py-2 text-sm font-semibold text-white shadow-md print:hidden">
+          <WifiOff size={16} />
+          Modo Balcão (dev): Caixa Principal não encontrado neste navegador — usando dados locais de desenvolvimento.
+        </div>
+      )}
+      {showReconnectBanner && !isDevFallback && (
         <div className="fixed inset-x-0 top-0 z-[200] flex items-center justify-center gap-2 bg-amber-500 py-2 text-sm font-semibold text-white shadow-md print:hidden">
           <WifiOff size={16} className="animate-pulse" />
           Tentando reconectar ao Caixa Principal...

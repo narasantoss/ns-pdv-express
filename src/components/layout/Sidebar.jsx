@@ -109,7 +109,7 @@ export default function Sidebar({ active, onSelect }) {
     >
       <div
         className={clsx(
-          'flex items-center border-b border-slate-100 py-5 transition-all duration-300 ease-in-out',
+          'flex items-center border-b border-slate-100 py-3.5 transition-all duration-300 ease-in-out',
           isCollapsed ? 'justify-center px-2' : 'justify-between gap-2 px-5',
         )}
       >
@@ -142,7 +142,7 @@ export default function Sidebar({ active, onSelect }) {
                   onClick={() => onSelect(id)}
                   title={isCollapsed ? undefined : locked ? `${label} — requer PIN do Supervisor` : undefined}
                   className={clsx(
-                    'flex w-full items-center rounded-lg py-2.5 text-sm font-medium transition-colors',
+                    'flex w-full items-center rounded-lg py-2 text-sm font-medium transition-colors',
                     isCollapsed ? 'justify-center px-0' : 'gap-2.5 px-3',
                     active === id
                       ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
@@ -173,7 +173,7 @@ export default function Sidebar({ active, onSelect }) {
 
       <div
         className={clsx(
-          'border-t border-slate-100 py-4 transition-all duration-300 ease-in-out',
+          'border-t border-slate-100 py-3 transition-all duration-300 ease-in-out',
           isCollapsed ? 'px-2' : 'px-5',
         )}
       >

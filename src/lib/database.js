@@ -10,7 +10,7 @@
 // caem para `localStorage`, preservando o mesmo formato, para que a tela
 // continue funcional fora do app empacotado.
 
-import { getConnection, isTauriRuntime, getConfig } from '../services/db'
+import { getConnection, isTauriRuntime, getConfig, isDevLanFallback } from '../services/db'
 import { fetchComandasFromMaster, postComandasToMaster } from '../services/masterClient'
 
 const LOCAL_STORAGE_KEY = 'pdv-sistema-2026:comandas'
@@ -67,6 +67,10 @@ export async function loadComandas(getProductName) {
   if (target) {
     const result = await fetchComandasFromMaster(target, getProductName)
     if (result.ok) return result.data
+    if (isDevLanFallback(result)) {
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — usando storage local de desenvolvimento para comandas.`)
+      return loadFromLocalStorage()
+    }
     console.error(`[database] Falha ao carregar comandas do Caixa Principal (${target}):`, result.reason)
     return emptyComandas()
   }
@@ -115,9 +119,13 @@ export async function persistComandas(comandas) {
   const target = await getLanTarget()
   if (target) {
     const result = await postComandasToMaster(target, comandas)
-    if (!result.ok) {
-      console.error(`[database] Falha ao salvar comandas no Caixa Principal (${target}):`, result.reason)
+    if (result.ok) return
+    if (isDevLanFallback(result)) {
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — salvando comandas no storage local de desenvolvimento.`)
+      persistToLocalStorage(comandas)
+      return
     }
+    console.error(`[database] Falha ao salvar comandas no Caixa Principal (${target}):`, result.reason)
     return
   }
 

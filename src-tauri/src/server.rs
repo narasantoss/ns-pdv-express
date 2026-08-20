@@ -69,6 +69,7 @@ pub async fn start_local_server(app: tauri::AppHandle) -> Result<u16, String> {
   let state = AppState { db_path };
   let router = Router::new()
     .route("/api/ping", get(ping))
+    .route("/api/info", get(get_info))
     .route("/api/produtos", get(get_produtos).post(post_produtos))
     .route("/api/produtos/{id}", put(put_produtos).delete(delete_produtos))
     .route("/api/produtos/{id}/ajuste-estoque", post(post_ajuste_estoque_produto))
@@ -194,6 +195,32 @@ fn internal_error(message: String) -> (StatusCode, String) {
 
 async fn ping() -> Json<Value> {
   Json(json!({ "status": "online", "role": "mestre", "versao": VERSAO }))
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/info — diagnóstico rápido: caminho do banco em uso e contagem de
+// produtos, para validar de fora (ex. `curl`) que este servidor está de fato
+// lendo/escrevendo no arquivo esperado (`app_config_dir/pdv_express.db`).
+// ---------------------------------------------------------------------------
+
+async fn get_info(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, String)> {
+  let db_path = state.db_path.clone();
+  let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+    let conn = open_conn(&db_path)?;
+    let total_produtos: i64 = conn
+      .query_row("SELECT COUNT(*) FROM produtos", [], |row| row.get(0))
+      .map_err(|error| error.to_string())?;
+    Ok(json!({
+      "status": "online",
+      "role": "mestre",
+      "versao": VERSAO,
+      "dbPath": db_path.to_string_lossy(),
+      "totalProdutos": total_produtos,
+    }))
+  })
+  .await
+  .map_err(|error| internal_error(error.to_string()))?;
+  result.map(Json).map_err(internal_error)
 }
 
 // ---------------------------------------------------------------------------

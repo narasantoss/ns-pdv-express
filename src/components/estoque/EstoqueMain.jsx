@@ -29,6 +29,7 @@ import { useManagerAuth, MANAGER_ACTIONS } from '../../context/ManagerAuthContex
 import CategoriesModal from './CategoriesModal'
 import ImportProductsModal from './ImportProductsModal'
 import { buildProductsExportCsv, downloadTextFile } from '../../utils/csv'
+import { roundCurrency } from '../../utils/format'
 
 const UNIT_OPTIONS = ['UN', 'KG', 'G', 'MT', 'L', 'PAR', 'CX']
 
@@ -335,8 +336,8 @@ export default function EstoqueMain({ autoOpenNew = false, onAutoOpenNewHandled 
   // Margem de lucro calculada em tempo real a partir do formulário — alerta
   // visualmente (vermelho) quando o preço de venda ficaria abaixo do custo,
   // antes mesmo de salvar o produto.
-  const formCostPrice = Number.parseFloat(form.costPrice) || 0
-  const formSalePrice = Number.parseFloat(form.price) || 0
+  const formCostPrice = roundCurrency(Number.parseFloat(form.costPrice) || 0)
+  const formSalePrice = roundCurrency(Number.parseFloat(form.price) || 0)
   const marginValue = formSalePrice - formCostPrice
   const marginPercent = formSalePrice > 0 ? (marginValue / formSalePrice) * 100 : 0
   const showMarginHint = form.costPrice !== '' && form.price !== ''
@@ -509,8 +510,8 @@ export default function EstoqueMain({ autoOpenNew = false, onAutoOpenNewHandled 
       code: form.hasVariations ? '' : form.code.trim(),
       category: form.category.trim() || 'Geral',
       supplierId: form.supplierId ? Number(form.supplierId) : null,
-      costPrice: Number.parseFloat(form.costPrice) || 0,
-      price: Number.parseFloat(form.price) || 0,
+      costPrice: roundCurrency(Number.parseFloat(form.costPrice) || 0),
+      price: roundCurrency(Number.parseFloat(form.price) || 0),
       unit: form.unit,
       weighable: form.weighable,
       scaleCode: form.weighable ? form.scaleCode.trim() : '',

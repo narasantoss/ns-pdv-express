@@ -26,7 +26,7 @@ import { buildProductImportTemplate, downloadTextFile } from '../../utils/csv'
 import { useOnboarding } from '../../context/OnboardingContext'
 
 const SUPPORT_EMAIL = 'nssistemastech@gmail.com'
-const YOUTUBE_PLAYLIST_URL = 'https://www.youtube.com/playlist?list=PLS71r6kwmQI4'
+const YOUTUBE_PLAYLIST_URL = 'https://www.youtube.com/playlist?list=PLS71r6kwmQl4'
 
 const SECTIONS = [
   { id: 'instalacao', label: 'Instalação & Licença', icon: ShieldCheck },
@@ -221,41 +221,37 @@ export default function ComoUsarMain() {
         </button>
       </header>
 
-      <div className="shrink-0 overflow-hidden rounded-xl border border-red-200 bg-gradient-to-r from-red-50 via-white to-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600">
-              <SquarePlay size={22} />
+      <div className="shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white px-5 py-3.5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-500">
+              <SquarePlay size={17} />
             </span>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-red-600">
-                🎬 Vídeo Aulas & Tutoriais Práticos
-              </p>
-              <h2 className="text-base font-bold text-slate-900">Aprenda a Usar em Vídeo</h2>
-              <p className="mt-1 max-w-xl text-sm text-slate-600">
-                Assista a vídeos curtos e práticos ensinando passo a passo como operar todo o sistema em
-                menos de 1 minuto.
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-slate-900">Aprenda a Usar em Vídeo</h2>
+              <p className="truncate text-xs text-slate-500">
+                Vídeos curtos e práticos, passo a passo, com menos de 1 minuto cada.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-col items-stretch gap-2 sm:items-end">
+          <div className="flex shrink-0 items-center gap-3">
+            <a
+              href={`mailto:${SUPPORT_EMAIL}`}
+              className="hidden items-center gap-1.5 text-xs font-medium text-slate-400 transition-colors hover:text-blue-600 hover:underline sm:flex"
+            >
+              <Mail size={12} />
+              Suporte: {SUPPORT_EMAIL}
+            </a>
             <a
               href={YOUTUBE_PLAYLIST_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-red-600/20 transition-colors hover:bg-red-700"
+              className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100"
             >
-              <SquarePlay size={16} />
-              🔴 Assistir Playlist de Tutoriais no YouTube
-              <ExternalLink size={14} className="opacity-80" />
-            </a>
-            <a
-              href={`mailto:${SUPPORT_EMAIL}`}
-              className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-blue-600 hover:underline"
-            >
-              <Mail size={12} />
-              Suporte de emergência: {SUPPORT_EMAIL}
+              <SquarePlay size={13} />
+              Assistir Playlist
+              <ExternalLink size={12} className="opacity-70" />
             </a>
           </div>
         </div>
@@ -288,7 +284,7 @@ export default function ComoUsarMain() {
                 <Fingerprint size={13} />
                 Identificador deste Computador (HWID)
               </p>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm leading-relaxed text-slate-600">
                 Cada instalação gera um identificador único de hardware (HWID), usado para vincular a
                 licença a este computador. Informe-o ao suporte na hora de gerar sua chave de ativação.
               </p>
@@ -308,12 +304,12 @@ export default function ComoUsarMain() {
                   Processo 100% Automático
                 </span>
               </div>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm leading-relaxed text-slate-600">
                 A ativação não depende de suporte manual: assim que sua compra é confirmada, a Chave de
                 Ativação é enviada instantaneamente na confirmação do seu pedido.
               </p>
 
-              <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-slate-600">
+              <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-slate-600">
                 <li>Baixe o instalador oficial pelo link disponibilizado na confirmação do seu pedido.</li>
                 <li>
                   Se o Windows exibir o aviso do SmartScreen, clique em{' '}
@@ -326,7 +322,7 @@ export default function ComoUsarMain() {
                 </li>
               </ol>
 
-              <p className="mt-3 text-sm text-slate-600">
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">
                 A validação é feita localmente, sem necessidade de internet ou contato com o suporte, e a
                 ativação ocorre uma única vez por computador.
               </p>
@@ -343,33 +339,13 @@ export default function ComoUsarMain() {
             <div className="rounded-lg border border-slate-200 p-4">
               <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <Wifi size={13} />
-                Conectando 2 Computadores na Mesma Rede
+                Licença Monousuário & Rede Local
               </p>
-              <p className="mb-3 text-sm text-slate-600">
-                Não é preciso mexer em nada técnico do Windows — é só copiar e colar um código de um
-                computador para o outro. Os dois computadores precisam estar ligados no mesmo
-                Wi-Fi/roteador da loja.
-              </p>
-              <ol className="list-decimal space-y-2.5 pl-5 text-sm text-slate-600">
-                <li>
-                  <span className="font-semibold text-slate-800">No computador do Caixa Principal</span>: abra{' '}
-                  <span className="font-semibold">Configurações → Modo de Operação do Sistema</span> e marque{' '}
-                  <span className="font-semibold">"PC Mestre / Caixa Principal"</span>. Um cartão verde aparece
-                  na tela com o Código de Conexão — é um número grande, tipo 192.168.1.10.
-                </li>
-                <li>
-                  Clique em <span className="font-semibold">"Copiar Código de Conexão"</span> nesse cartão verde.
-                </li>
-                <li>
-                  <span className="font-semibold text-slate-800">No computador do Balcão/Atendimento</span>: abra
-                  o mesmo painel de Configurações, marque <span className="font-semibold">"PC Cliente / Balcão"</span>,
-                  cole o código no campo indicado e clique em <span className="font-semibold">"Testar Conexão"</span> para
-                  confirmar que os dois computadores se enxergam na rede.
-                </li>
-              </ol>
-              <p className="mt-3 text-xs text-slate-400">
-                Depois de conectado, o terminal do Balcão passa a operar com acesso restrito (apenas Vendas e
-                Produtos), liberável a qualquer momento com o PIN do Gerente/Admin.
+              <p className="text-sm leading-relaxed text-slate-600">
+                O sistema opera com <span className="font-semibold text-slate-800">1 licença por computador</span>.
+                O recurso de sincronização entre múltiplos PCs na mesma rede local está em{' '}
+                <span className="font-semibold text-slate-800">fase de testes internos</span> e será
+                disponibilizado em futuras atualizações. No momento, cada terminal opera de forma individual.
               </p>
             </div>
           </div>
@@ -377,7 +353,7 @@ export default function ComoUsarMain() {
 
         {activeSection === 'atalhos' && (
           <div>
-            <p className="mb-4 text-sm text-slate-500">
+            <p className="mb-4 text-sm leading-relaxed text-slate-500">
               Atalhos disponíveis na tela de Vendas — funcionam em qualquer campo do carrinho, exceto quando
               você está digitando dentro de um campo de texto.
             </p>
@@ -397,7 +373,7 @@ export default function ComoUsarMain() {
                           {shortcut.key}
                         </kbd>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{shortcut.description}</td>
+                      <td className="px-4 py-3 leading-relaxed text-slate-600">{shortcut.description}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -414,7 +390,7 @@ export default function ComoUsarMain() {
                   <guide.icon size={16} className="text-blue-600" />
                   {guide.title}
                 </p>
-                <ol className="list-decimal space-y-1.5 pl-5 text-sm text-slate-600">
+                <ol className="list-decimal space-y-2 pl-5 text-sm leading-relaxed text-slate-600">
                   {guide.steps.map((step, index) => (
                     <li key={index}>{step}</li>
                   ))}
@@ -469,7 +445,7 @@ export default function ComoUsarMain() {
                         />
                       </button>
                       {isOpen && (
-                        <div className="bg-slate-50 px-4 py-3 text-sm text-slate-600">{item.answer}</div>
+                        <div className="bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600">{item.answer}</div>
                       )}
                     </div>
                   )

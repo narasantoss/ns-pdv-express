@@ -24,7 +24,6 @@ import {
   Layers,
   Tag,
   Receipt,
-  ScrollText,
   Ban,
   Volume2,
   VolumeX,
@@ -173,7 +172,7 @@ function formatExpectedDeliveryLabel(expectedDeliveryDate) {
   return Number.isNaN(parsed.getTime()) ? null : expectedDateFormatter.format(parsed)
 }
 
-const QUICK_CASH_OPTIONS = [20, 50, 100, 200]
+const QUICK_CASH_OPTIONS = [10, 20, 50, 100]
 
 const INSTALLMENT_OPTIONS = [1, 2, 3, 4, 5, 6, 10, 12]
 
@@ -204,22 +203,14 @@ function formatElapsedTime(openedAt, now) {
 
 const RECEIPT_OPTIONS = [
   {
-    id: 'cupom',
-    label: 'Imprimir Cupom Não Fiscal',
-    description: 'Impressora térmica 58mm/80mm',
-    icon: Receipt,
-  },
-  {
-    id: 'nfce',
-    label: 'Emitir NFC-e / Fiscal',
-    description: 'Transmissão para a SEFAZ com QR Code',
-    icon: ScrollText,
-  },
-  {
     id: 'sem-impressao',
-    label: 'Finalizar sem Imprimir',
-    description: 'Não gera cupom nem nota fiscal',
+    label: 'Não Imprimir',
     icon: Ban,
+  },
+  {
+    id: 'cupom',
+    label: 'Imprimir Cupom',
+    icon: Receipt,
   },
 ]
 
@@ -294,7 +285,7 @@ function ShortcutButton({ keyLabel, description, icon: Icon, tone, onClick }) {
       type="button"
       onClick={onClick}
       className={clsx(
-        'flex h-full min-h-[72px] flex-1 flex-col items-center justify-center gap-1 rounded-lg border-b-4 p-2 text-white shadow-sm transition-all active:translate-y-0.5 active:border-b-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+        'flex h-full min-h-[58px] flex-1 flex-col items-center justify-center gap-1 rounded-lg border-b-4 p-1.5 text-white shadow-sm transition-all active:translate-y-0.5 active:border-b-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
         SHORTCUT_TONE_CLASSES[tone],
       )}
     >
@@ -409,7 +400,7 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
   const [weightSaleInput, setWeightSaleInput] = useState('')
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [splitPayments, setSplitPayments] = useState({ dinheiro: '', cartao: '', pix: '' })
-  const [receiptOption, setReceiptOption] = useState('cupom')
+  const [receiptOption, setReceiptOption] = useState('sem-impressao')
   const [soundMuted, setSoundMutedState] = useState(() => isSoundMuted())
   const [movementModal, setMovementModal] = useState(null)
   const [movementForm, setMovementForm] = useState(EMPTY_MOVEMENT_FORM)
@@ -867,7 +858,7 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
     if (cart.length === 0) return
     setAmountReceived('')
     setSplitPayments({ dinheiro: '', cartao: '', pix: '' })
-    setReceiptOption('cupom')
+    setReceiptOption('sem-impressao')
     setInstallments(1)
     setNoteDocument('')
     setIsDeliveryMode(false)
@@ -1301,7 +1292,7 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
     setActiveComandaId(null)
     setAmountReceived('')
     setSplitPayments({ dinheiro: '', cartao: '', pix: '' })
-    setReceiptOption('cupom')
+    setReceiptOption('sem-impressao')
     setInstallments(1)
     setNoteDocument('')
     setShowConfirmModal(true)
@@ -1533,7 +1524,7 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
 
           printReceiptWindow({
             storeSettings: settings,
-            documentType: receiptOption === 'nfce' ? 'nfce' : 'cupom',
+            documentType: 'cupom',
             width: 80,
             saleCode: `#${result.id}`,
             dateTimeLabel: receiptDateTimeFormatter.format(new Date()),
@@ -1882,9 +1873,9 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
   const weekdayLabel = weekdayFormatter.format(now)
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-hidden">
+    <div className="flex h-full flex-col gap-3 overflow-hidden">
       {/* Header interno do PDV: status do caixa, controle de caixa e relógio */}
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-3 shadow-sm">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-2.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm">
         <div className="flex items-center gap-3">
           <span className="relative flex h-2.5 w-2.5">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -1981,10 +1972,10 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[1fr_380px]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden lg:grid-cols-[1fr_360px]">
         {/* Painel esquerdo: leitura de código de barras e carrinho */}
-        <section className="flex min-h-0 flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="rounded-xl border-2 border-dashed border-blue-300 bg-blue-50/60 p-3">
+        <section className="flex min-h-0 flex-col gap-2.5 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="rounded-xl border-2 border-dashed border-blue-300 bg-blue-50/60 p-2.5">
             <label
               htmlFor="barcode-input"
               className="flex items-center justify-between gap-1.5 px-1 text-xs font-bold uppercase tracking-widest text-blue-700"
@@ -2013,7 +2004,7 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
                 onChange={(event) => setSearchTerm(event.target.value)}
                 onKeyDown={handleSearchKeyDown}
                 placeholder="Bipe o produto, digite o código / nome ou C15 para uma comanda…"
-                className="w-full rounded-lg border-2 border-blue-200 bg-white py-4 pl-14 pr-10 text-lg font-medium text-slate-900 outline-none transition-colors placeholder:text-base placeholder:font-normal focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20"
+                className="w-full rounded-lg border-2 border-blue-200 bg-white py-3 pl-14 pr-10 text-lg font-medium text-slate-900 outline-none transition-colors placeholder:text-base placeholder:font-normal focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20"
               />
               <Search
                 size={18}
@@ -2148,8 +2139,8 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
         </section>
 
         {/* Painel direito: total, atalhos e finalização */}
-        <section className="flex min-h-0 flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="rounded-xl bg-gradient-to-br from-slate-900 to-slate-950 p-6 shadow-xl ring-1 ring-slate-800">
+        <section className="flex min-h-0 flex-col gap-2.5 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="rounded-xl bg-gradient-to-br from-slate-900 to-slate-950 p-4 shadow-xl ring-1 ring-slate-800">
             <div className="flex items-center justify-between text-xs font-medium text-slate-400">
               <span>Subtotal</span>
               <span className="tabular-nums">{formatCurrency(subtotal)}</span>
@@ -2175,11 +2166,11 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
               </div>
             )}
 
-            <div className="mt-3 border-t border-slate-800 pt-3 text-right">
+            <div className="mt-2 border-t border-slate-800 pt-2 text-right">
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
                 Valor Final
               </p>
-              <p className="mt-1 text-5xl font-black tabular-nums text-emerald-400">
+              <p className="mt-1 text-4xl font-black tabular-nums text-emerald-400">
                 {formatCurrency(total)}
               </p>
               <p className="mt-1 text-xs font-medium text-slate-500">
@@ -2188,8 +2179,8 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
             </div>
           </div>
 
-          <div className="mt-auto flex flex-col gap-3">
-            <div className="grid grid-cols-5 items-stretch gap-2">
+          <div className="mt-auto flex flex-col gap-2">
+            <div className="grid grid-cols-5 items-stretch gap-1.5">
               <ShortcutButton
                 keyLabel="F2"
                 description={isBalcaoMode ? 'Cobrar' : 'Finalizar'}
@@ -2231,7 +2222,7 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
               type="button"
               onClick={openConfirmModal}
               disabled={cart.length === 0}
-              className="w-full rounded-lg bg-blue-600 py-3.5 text-sm font-semibold text-white shadow-md shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+              className="w-full rounded-lg bg-blue-600 py-3 text-sm font-semibold text-white shadow-md shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
             >
               {isBalcaoMode ? 'Finalizar Venda / Cobrar (F2)' : 'Finalizar Venda (F2)'}
             </button>
@@ -2241,7 +2232,7 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
                 type="button"
                 onClick={openComandaHandoff}
                 disabled={cart.length === 0}
-                className="w-full rounded-lg border border-sky-300 bg-sky-50 py-3 text-sm font-semibold text-sky-700 shadow-sm transition-colors hover:bg-sky-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                className="w-full rounded-lg border border-sky-300 bg-sky-50 py-2.5 text-sm font-semibold text-sky-700 shadow-sm transition-colors hover:bg-sky-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
               >
                 <span className="flex items-center justify-center gap-2">
                   <Send size={16} />
@@ -2272,9 +2263,9 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
       {/* Modal de fechamento de venda */}
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-          <div className="my-auto flex max-h-[90vh] w-full max-w-md flex-col rounded-2xl bg-white shadow-2xl">
-            <div className="flex shrink-0 items-center justify-between px-6 pb-4 pt-6">
-              <h2 className="text-lg font-bold text-slate-900">Fechamento de Venda</h2>
+          <div className="my-auto flex max-h-[95vh] w-full max-w-md flex-col rounded-2xl bg-white shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between px-5 pb-2 pt-3.5">
+              <h2 className="text-base font-bold text-slate-900">Fechamento de Venda</h2>
               <button
                 type="button"
                 onClick={closeConfirmModal}
@@ -2285,98 +2276,73 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
               </button>
             </div>
 
-            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pb-4 pl-6 pr-2">
-            <div className="space-y-1 rounded-lg bg-slate-50 px-4 py-3 text-sm">
-              <div className="flex items-center justify-between text-slate-500">
-                <span>
-                  Subtotal · {itemCount} {itemCount === 1 ? 'item' : 'itens'}
-                </span>
-                <span className="tabular-nums">{formatCurrency(subtotal)}</span>
-              </div>
-              {discountAmount > 0 && (
-                <div className="flex items-center justify-between text-amber-600">
-                  <span>Desconto</span>
-                  <span className="tabular-nums">-{formatCurrency(discountAmount)}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between border-t border-slate-200 pt-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Total
-                </span>
-                <span className="text-xl font-bold tabular-nums text-slate-900">
-                  {formatCurrency(total)}
-                </span>
-              </div>
+            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pb-2.5 pl-5 pr-2">
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-1.5 text-sm">
+              <span className="text-xs text-slate-500">
+                Subtotal · {itemCount} {itemCount === 1 ? 'item' : 'itens'}
+                {discountAmount > 0 && (
+                  <span className="ml-1.5 text-amber-600">-{formatCurrency(discountAmount)}</span>
+                )}
+              </span>
+              <span className="text-lg font-bold tabular-nums text-slate-900">
+                {formatCurrency(total)}
+              </span>
             </div>
 
             {cartStockIssues.length > 0 && (
-              <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-red-50 p-2.5 text-xs font-medium text-red-700">
+              <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-red-50 p-2 text-xs font-medium text-red-700">
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                 Estoque insuficiente para {cartStockIssues.length === 1 ? 'este item' : 'estes itens'} do carrinho — finalizar vai pedir o PIN do Gerente.
               </p>
             )}
 
-            <div className="mt-4">
+            <div className="mt-2">
               <button
                 type="button"
                 onClick={toggleDeliveryMode}
                 className={clsx(
-                  'flex w-full items-center gap-2.5 rounded-xl border-2 p-3 text-left transition-all',
+                  'flex w-full items-center gap-2 rounded-lg border-2 px-3 py-2 text-left transition-all',
                   isDeliveryMode
                     ? 'border-sky-500 bg-sky-50 text-sky-700 shadow-sm shadow-sky-500/10'
                     : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50',
                 )}
               >
-                <Truck size={20} className="shrink-0" />
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold leading-tight">
-                    Enviar para Delivery
-                  </span>
-                  <span className="block text-xs font-normal leading-tight text-slate-400">
-                    Pago no caixa agora ou cobrado do cliente na entrega — você escolhe a seguir
-                  </span>
-                </span>
+                <Truck size={16} className="shrink-0" />
+                <span className="text-xs font-semibold leading-tight">Enviar para Delivery</span>
               </button>
             </div>
 
             {!isDeliveryMode && (
               <>
-            <div className="mt-4">
-              <div className="mb-2 flex items-center justify-between">
+            <div className="mt-2">
+              <div className="mb-1.5 flex items-center justify-between">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Forma de Pagamento
                 </h3>
                 <span className="text-[10px] font-medium text-slate-400">Teclas 1-5</span>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                {PAYMENT_METHODS.map(({ id, label, icon: Icon, shortcut }) => (
+              <div className="grid grid-cols-3 gap-1.5">
+                {PAYMENT_METHODS.map(({ id, label, icon: Icon }) => (
                   <button
                     key={id}
                     type="button"
                     onClick={() => setPaymentMethod(id)}
                     className={clsx(
-                      'flex flex-col items-center gap-1 rounded-xl border-2 p-2.5 transition-all',
+                      'flex items-center gap-1.5 rounded-lg border-2 px-2 py-1.5 transition-all',
                       paymentMethod === id
-                        ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md shadow-blue-500/10'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm shadow-blue-500/10'
                         : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50',
                     )}
                   >
-                    <span className="relative">
-                      <Icon size={20} />
-                      {shortcut && (
-                        <span className="absolute -right-2.5 -top-2.5 flex h-4 w-4 items-center justify-center rounded-full border border-white bg-slate-800 font-mono text-[9px] font-bold text-white">
-                          {shortcut}
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-center text-xs font-semibold leading-tight">{label}</span>
+                    <Icon size={14} className="shrink-0" />
+                    <span className="truncate text-[11px] font-semibold leading-tight">{label}</span>
                   </button>
                 ))}
               </div>
             </div>
 
             {paymentMethod === 'dinheiro' && (
-              <div className="mt-4 space-y-3">
+              <div className="mt-2 space-y-2">
                 <div>
                   <label
                     htmlFor="amount-received"
@@ -2394,42 +2360,26 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
                     value={amountReceived}
                     onChange={(event) => setAmountReceived(event.target.value)}
                     placeholder="0,00"
-                    className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-base font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-base font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
                   />
 
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-1.5 flex gap-1.5">
                     <button
                       type="button"
                       onClick={fillExactAmount}
-                      className="flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                      className="flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
                     >
                       Exato
                       <kbd className="rounded border border-emerald-300 bg-white px-1 font-mono text-[9px]">F7</kbd>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => addQuickCash(50)}
-                      className="flex items-center gap-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                    >
-                      + R$ 50
-                      <kbd className="rounded border border-slate-300 bg-white px-1 font-mono text-[9px]">F5</kbd>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => addQuickCash(100)}
-                      className="flex items-center gap-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                    >
-                      + R$ 100
-                      <kbd className="rounded border border-slate-300 bg-white px-1 font-mono text-[9px]">F6</kbd>
                     </button>
                     {QUICK_CASH_OPTIONS.map((value) => (
                       <button
                         key={value}
                         type="button"
-                        onClick={() => setAmountReceived(value.toFixed(2))}
-                        className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                        onClick={() => addQuickCash(value)}
+                        className="flex-1 rounded-lg border border-slate-300 bg-slate-50 px-1.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
                       >
-                        R$ {value}
+                        +R${value}
                       </button>
                     ))}
                   </div>
@@ -2437,13 +2387,13 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
 
                 <div
                   className={clsx(
-                    'rounded-xl p-5 text-center',
+                    'flex items-center justify-between rounded-lg px-3 py-2',
                     isCashInsufficient ? 'bg-amber-50' : 'bg-emerald-50',
                   )}
                 >
                   <p
                     className={clsx(
-                      'text-xs font-bold uppercase tracking-[0.2em]',
+                      'text-xs font-bold uppercase tracking-[0.15em]',
                       isCashInsufficient ? 'text-amber-600' : 'text-emerald-600',
                     )}
                   >
@@ -2451,7 +2401,7 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
                   </p>
                   <p
                     className={clsx(
-                      'mt-1 text-5xl font-black tabular-nums',
+                      'text-2xl font-black tabular-nums',
                       isCashInsufficient ? 'text-amber-600' : 'text-emerald-600',
                     )}
                   >
@@ -2462,35 +2412,35 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
             )}
 
             {paymentMethod === 'pix' && (
-              <div className="mt-4 space-y-3">
-                <div className="flex flex-col items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
-                  <div className="flex h-32 w-32 items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white">
-                    <QrCode size={80} strokeWidth={1} className="text-slate-700" />
+              <div className="mt-2 space-y-2">
+                <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-white">
+                    <QrCode size={32} strokeWidth={1} className="text-slate-700" />
                   </div>
-                  <div className="w-full text-left">
+                  <div className="min-w-0 flex-1">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
                       Chave PIX
                     </p>
-                    <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2">
-                      <span className="truncate font-mono text-sm text-slate-800">{pixKey}</span>
+                    <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-2 py-1.5">
+                      <span className="truncate font-mono text-xs text-slate-800">{pixKey}</span>
                       <button
                         type="button"
                         onClick={copyPixKey}
-                        className="shrink-0 rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                        className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                         aria-label="Copiar chave PIX"
                         title="Copiar chave PIX"
                       >
-                        <Copy size={14} />
+                        <Copy size={13} />
                       </button>
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-xl bg-emerald-50 p-5 text-center">
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-600">
+                <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2">
+                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-emerald-600">
                     Valor a Cobrar
                   </p>
-                  <p className="mt-1 text-4xl font-black tabular-nums text-emerald-600">
+                  <p className="text-2xl font-black tabular-nums text-emerald-600">
                     {formatCurrency(total)}
                   </p>
                 </div>
@@ -2498,19 +2448,19 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
             )}
 
             {paymentMethod === 'cartao-credito' && (
-              <div className="mt-4 space-y-3">
+              <div className="mt-2 space-y-2">
                 <div>
                   <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                     Parcelamento
                   </p>
-                  <div className="mt-2 grid grid-cols-4 gap-2">
+                  <div className="mt-1.5 grid grid-cols-4 gap-1.5">
                     {INSTALLMENT_OPTIONS.map((n) => (
                       <button
                         key={n}
                         type="button"
                         onClick={() => setInstallments(n)}
                         className={clsx(
-                          'rounded-lg border-2 py-2 text-xs font-semibold transition-colors',
+                          'rounded-lg border-2 py-1.5 text-xs font-semibold transition-colors',
                           installments === n
                             ? 'border-blue-500 bg-blue-50 text-blue-700'
                             : 'border-slate-200 text-slate-500 hover:border-slate-300',
@@ -2522,11 +2472,11 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
                   </div>
                 </div>
 
-                <div className="rounded-xl bg-slate-50 p-5 text-center">
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">
                     {installments}x de
                   </p>
-                  <p className="mt-1 text-4xl font-black tabular-nums text-slate-800">
+                  <p className="text-2xl font-black tabular-nums text-slate-800">
                     {formatCurrency(total / installments)}
                   </p>
                 </div>
@@ -2534,19 +2484,19 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
             )}
 
             {paymentMethod === 'cartao-debito' && (
-              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
-                <Wallet size={28} className="mx-auto text-slate-400" />
-                <p className="mt-2 text-sm font-semibold text-slate-700">
-                  Insira ou aproxime o cartão de débito na maquininha
+              <div className="mt-2 flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <Wallet size={20} className="shrink-0 text-slate-400" />
+                <p className="min-w-0 flex-1 text-xs font-semibold leading-tight text-slate-700">
+                  Insira ou aproxime o cartão na maquininha
                 </p>
-                <p className="mt-1 text-3xl font-black tabular-nums text-slate-800">
+                <p className="shrink-0 text-xl font-black tabular-nums text-slate-800">
                   {formatCurrency(total)}
                 </p>
               </div>
             )}
 
             {paymentMethod === 'crediario' && (
-              <div className="mt-4 space-y-3">
+              <div className="mt-2 space-y-2">
                 {selectedClient && (
                   <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
                     <div className="flex items-start justify-between">
@@ -2685,11 +2635,7 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
             )}
 
             {paymentMethod === 'misto' && (
-              <div className="mt-4 space-y-3">
-                <p className="text-xs font-medium text-slate-500">
-                  Divida o valor entre as formas de pagamento abaixo.
-                </p>
-
+              <div className="mt-2 space-y-2">
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <label
@@ -2751,7 +2697,7 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
 
                 <div
                   className={clsx(
-                    'rounded-xl p-4 text-center',
+                    'flex items-center justify-between rounded-lg px-3 py-2',
                     isSplitInsufficient
                       ? 'bg-amber-50'
                       : splitTroco > 0
@@ -2761,19 +2707,19 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
                 >
                   {isSplitInsufficient ? (
                     <>
-                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-600">
+                      <p className="text-xs font-bold uppercase tracking-[0.15em] text-amber-600">
                         Falta Alocar
                       </p>
-                      <p className="mt-1 text-3xl font-black tabular-nums text-amber-600">
+                      <p className="text-xl font-black tabular-nums text-amber-600">
                         {formatCurrency(splitRemaining)}
                       </p>
                     </>
                   ) : (
                     <>
-                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-600">
+                      <p className="text-xs font-bold uppercase tracking-[0.15em] text-emerald-600">
                         Troco (Dinheiro)
                       </p>
-                      <p className="mt-1 text-3xl font-black tabular-nums text-emerald-600">
+                      <p className="text-xl font-black tabular-nums text-emerald-600">
                         {splitTroco > 0 ? formatCurrency(splitTroco) : formatCurrency(0)}
                       </p>
                     </>
@@ -2782,52 +2728,35 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
               </div>
             )}
 
-            <div className="mt-4">
-              <label
-                htmlFor="note-document"
-                className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-slate-500"
-              >
-                <IdCard size={13} />
-                CPF/CNPJ na Nota (opcional)
-                <kbd className="rounded border border-slate-300 bg-slate-100 px-1 py-0.5 font-mono text-[9px] text-slate-500">
-                  F8
-                </kbd>
-              </label>
+            <div className="mt-2 flex items-center gap-2">
+              <IdCard size={14} className="shrink-0 text-slate-400" />
               <input
                 id="note-document"
                 ref={noteDocumentInputRef}
                 type="text"
                 value={noteDocument}
                 onChange={(event) => setNoteDocument(event.target.value)}
-                placeholder="000.000.000-00"
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+                placeholder="CPF/CNPJ na nota (opcional) · F8"
+                className="w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
               />
             </div>
 
-            <div className="mt-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Impressão do Cupom
-              </p>
-              <div className="mt-1 flex flex-col gap-1.5">
+            <div className="mt-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 {RECEIPT_OPTIONS.map((option) => (
                   <button
                     key={option.id}
                     type="button"
                     onClick={() => setReceiptOption(option.id)}
                     className={clsx(
-                      'flex items-center gap-2 rounded-lg border-2 p-2.5 text-left transition-colors',
+                      'flex items-center justify-center gap-1.5 rounded-lg border-2 py-1.5 text-xs font-semibold transition-colors',
                       receiptOption === option.id
                         ? 'border-blue-500 bg-blue-50 text-blue-700'
                         : 'border-slate-200 text-slate-600 hover:border-slate-300',
                     )}
                   >
-                    <option.icon size={15} className="shrink-0" />
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold leading-tight">{option.label}</span>
-                      <span className="block text-xs font-normal leading-tight text-slate-400">
-                        {option.description}
-                      </span>
-                    </span>
+                    <option.icon size={13} className="shrink-0" />
+                    {option.label}
                   </button>
                 ))}
               </div>
@@ -3041,13 +2970,13 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
                           value={amountReceived}
                           onChange={(event) => setAmountReceived(event.target.value)}
                           placeholder="0,00"
-                          className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-base font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+                          className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-base font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
                         />
-                        <div className="mt-2 flex flex-wrap gap-2">
+                        <div className="mt-1.5 flex gap-1.5">
                           <button
                             type="button"
                             onClick={fillExactAmount}
-                            className="flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                            className="flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
                           >
                             Exato
                           </button>
@@ -3055,22 +2984,22 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
                             <button
                               key={value}
                               type="button"
-                              onClick={() => setAmountReceived(value.toFixed(2))}
-                              className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                              onClick={() => addQuickCash(value)}
+                              className="flex-1 rounded-lg border border-slate-300 bg-slate-50 px-1.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
                             >
-                              R$ {value}
+                              +R${value}
                             </button>
                           ))}
                         </div>
                         <div
                           className={clsx(
-                            'mt-2 rounded-xl p-4 text-center',
+                            'mt-1.5 flex items-center justify-between rounded-lg px-3 py-2',
                             isCashInsufficient ? 'bg-amber-50' : 'bg-emerald-50',
                           )}
                         >
                           <p
                             className={clsx(
-                              'text-xs font-bold uppercase tracking-[0.2em]',
+                              'text-xs font-bold uppercase tracking-[0.15em]',
                               isCashInsufficient ? 'text-amber-600' : 'text-emerald-600',
                             )}
                           >
@@ -3078,7 +3007,7 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
                           </p>
                           <p
                             className={clsx(
-                              'mt-1 text-3xl font-black tabular-nums',
+                              'text-xl font-black tabular-nums',
                               isCashInsufficient ? 'text-amber-600' : 'text-emerald-600',
                             )}
                           >
@@ -3155,13 +3084,13 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
             )}
             </div>
 
-            <div className="flex shrink-0 gap-2 border-t border-slate-100 px-6 py-4">
+            <div className="flex shrink-0 gap-2 border-t border-slate-100 px-5 py-3">
               <button
                 type="button"
                 onClick={closeConfirmModal}
                 className="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
-                Cancelar
+                Cancelar (ESC)
               </button>
               <button
                 type="button"
@@ -3180,7 +3109,7 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
                   ? isDeliveryAdvancePaid
                     ? 'Confirmar Pagamento e Enviar'
                     : 'Enviar Pedido para Delivery'
-                  : 'Confirmar Venda'}
+                  : 'Confirmar Venda (ENTER)'}
               </button>
             </div>
           </div>

@@ -112,7 +112,7 @@ export default function TelaAtivacaoLicenca({ onActivated }) {
                 setSerial(event.target.value)
               }}
               onAnimationEnd={() => setShake(false)}
-              placeholder="NSPDV-2026-PRO-BR99"
+              placeholder="Cole sua Chave Serial (Ex: NS84-9B21-K782-X901)"
               className={clsx(
                 'mt-1 w-full rounded-lg border bg-slate-50 px-3 py-3 text-center text-base font-mono font-semibold tracking-wide outline-none focus:ring-2 disabled:opacity-60',
                 status === 'error'

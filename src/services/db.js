@@ -728,9 +728,12 @@ export async function setManyConfig(entries) {
 // venda/orçamento, baixa de estoque etc.).
 // ---------------------------------------------------------------------------
 
-// Elimina dízimas de ponto flutuante (ex.: 0.1 + 0.2) no subtotal gravado de
-// cada item de venda — importante sobretudo para produtos pesáveis, cuja
-// quantidade é uma fração (0.350, 1.275) multiplicada pelo preço.
+// Elimina dízimas de ponto flutuante (ex.: 0.1 + 0.2) em qualquer valor
+// monetário antes de gravar/exibir — usado no subtotal de cada item de venda
+// (importante sobretudo para produtos pesáveis, cuja quantidade é uma fração
+// como 0.350/1.275 multiplicada pelo preço) e em `preco_custo`/`preco_venda`
+// de produtos (rowToProduct/productToRow), pra nunca deixar um valor como
+// 20.00 virar 19.98 (ou 19.999999999999996) por imprecisão de f64.
 function roundCurrency(value) {
   return Math.round((Number(value) || 0) * 100) / 100
 }
@@ -760,13 +763,29 @@ async function getLanTarget() {
   return ip && ip.trim() ? ip.trim() : null
 }
 
+/**
+ * No app empacotado (Tauri), um Mestre inalcançável em modo Balcão é erro de
+ * verdade — o PC depende dele e a tela deve mostrar a falha. Mas testar modo
+ * Balcão só no navegador (`npm run dev` em duas abas, sem nenhum servidor
+ * Rust de pé) sempre bate em "unreachable"/"timeout"; travar cada tela com
+ * uma exceção nesse cenário de desenvolvimento serve só para atrapalhar —
+ * por isso os repositórios abaixo caem para o storage local (compartilhado
+ * entre abas da mesma origem via localStorage) em vez de lançar.
+ */
+export function isDevLanFallback(result) {
+  return !isTauriRuntime() && (result.reason === 'unreachable' || result.reason === 'timeout')
+}
+
 export const produtosRepo = {
   async list() {
     const target = await getLanTarget()
     if (target) {
       const result = await fetchProdutosFromMaster(target)
       if (result.ok) return result.data
-      throw new Error(`Não foi possível carregar os produtos do Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível carregar os produtos do Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — usando storage local de desenvolvimento para produtos.`)
     }
     const rows = await listRows('produtos', { orderBy: 'nome' })
     return rows.map(rowToProduct)
@@ -777,7 +796,10 @@ export const produtosRepo = {
     if (target) {
       const result = await createProdutoOnMaster(target, row)
       if (result.ok) return result.data
-      throw new Error(`Não foi possível criar o produto no Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível criar o produto no Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — criando o produto no storage local de desenvolvimento.`)
     }
     const created = await insertRow('produtos', row)
     return rowToProduct(created)
@@ -788,7 +810,10 @@ export const produtosRepo = {
     if (target) {
       const result = await updateProdutoOnMaster(target, id, row)
       if (result.ok) return result.data
-      throw new Error(`Não foi possível atualizar o produto no Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível atualizar o produto no Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — atualizando o produto no storage local de desenvolvimento.`)
     }
     const updated = await updateRow('produtos', id, row)
     return updated ? rowToProduct(updated) : null
@@ -797,8 +822,11 @@ export const produtosRepo = {
     const target = await getLanTarget()
     if (target) {
       const result = await removeProdutoOnMaster(target, id)
-      if (!result.ok) throw new Error(`Não foi possível remover o produto no Caixa Principal (${target}): ${result.reason}`)
-      return
+      if (result.ok) return
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível remover o produto no Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — removendo o produto no storage local de desenvolvimento.`)
     }
     await deleteRow('produtos', id)
   },
@@ -808,7 +836,10 @@ export const produtosRepo = {
     if (target) {
       const result = await adjustProdutoStockOnMaster(target, id, deltaQuantidade, null)
       if (result.ok) return result.data
-      throw new Error(`Não foi possível ajustar o estoque no Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível ajustar o estoque no Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — ajustando o estoque no storage local de desenvolvimento.`)
     }
     const row = await getRowById('produtos', id)
     if (!row) return null
@@ -833,7 +864,10 @@ export const produtosRepo = {
     if (target) {
       const result = await adjustProdutoStockOnMaster(target, id, deltaQuantidade, variationKey)
       if (result.ok) return result.data
-      throw new Error(`Não foi possível ajustar o estoque no Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível ajustar o estoque no Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — ajustando o estoque no storage local de desenvolvimento.`)
     }
     const row = await getRowById('produtos', id)
     if (!row) return null
@@ -870,8 +904,8 @@ export function rowToProduct(row) {
     code: row.codigo_barras ?? '',
     name: row.nome ?? '',
     category: row.categoria ?? '',
-    costPrice: Number(row.preco_custo ?? 0),
-    price: Number(row.preco_venda ?? 0),
+    costPrice: roundCurrency(row.preco_custo ?? 0),
+    price: roundCurrency(row.preco_venda ?? 0),
     stock: Number(row.estoque_atual ?? 0),
     minStock: Number(row.estoque_minimo ?? 0),
     unit: row.unidade_medida ?? 'UN',
@@ -894,8 +928,8 @@ function productToRow(product) {
     codigo_barras: code ?? '',
     nome: name ?? '',
     categoria: category ?? '',
-    preco_custo: Number(costPrice ?? 0),
-    preco_venda: Number(price ?? 0),
+    preco_custo: roundCurrency(costPrice ?? 0),
+    preco_venda: roundCurrency(price ?? 0),
     estoque_atual: Number(stock ?? 0),
     estoque_minimo: Number(minStock ?? 0),
     unidade_medida: unit ?? 'UN',
@@ -911,7 +945,10 @@ export const clientesRepo = {
     if (target) {
       const result = await fetchClientesFromMaster(target)
       if (result.ok) return result.data
-      throw new Error(`Não foi possível carregar os clientes do Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível carregar os clientes do Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — usando storage local de desenvolvimento para clientes.`)
     }
     const rows = await listRows('clientes', { orderBy: 'nome' })
     return rows.map(rowToClient)
@@ -922,7 +959,10 @@ export const clientesRepo = {
     if (target) {
       const result = await createClienteOnMaster(target, row)
       if (result.ok) return result.data
-      throw new Error(`Não foi possível criar o cliente no Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível criar o cliente no Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — criando o cliente no storage local de desenvolvimento.`)
     }
     const created = await insertRow('clientes', row)
     return rowToClient(created)
@@ -933,7 +973,10 @@ export const clientesRepo = {
     if (target) {
       const result = await updateClienteOnMaster(target, id, row)
       if (result.ok) return result.data
-      throw new Error(`Não foi possível atualizar o cliente no Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível atualizar o cliente no Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — atualizando o cliente no storage local de desenvolvimento.`)
     }
     const updated = await updateRow('clientes', id, row)
     return updated ? rowToClient(updated) : null
@@ -942,8 +985,11 @@ export const clientesRepo = {
     const target = await getLanTarget()
     if (target) {
       const result = await removeClienteOnMaster(target, id)
-      if (!result.ok) throw new Error(`Não foi possível remover o cliente no Caixa Principal (${target}): ${result.reason}`)
-      return
+      if (result.ok) return
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível remover o cliente no Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — removendo o cliente no storage local de desenvolvimento.`)
     }
     await deleteRow('clientes', id)
   },
@@ -953,7 +999,10 @@ export const clientesRepo = {
     if (target) {
       const result = await registerClienteMovementOnMaster(target, id, { type, amount, description })
       if (result.ok) return result.data
-      throw new Error(`Não foi possível lançar o movimento no Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível lançar o movimento no Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — lançando o movimento no storage local de desenvolvimento.`)
     }
     const row = await getRowById('clientes', id)
     if (!row) return null
@@ -1030,7 +1079,10 @@ export const vendasRepo = {
     if (target) {
       const result = await fetchVendasFromMaster(target)
       if (result.ok) return result.data.map(({ venda }) => venda)
-      throw new Error(`Não foi possível carregar as vendas do Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível carregar as vendas do Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — usando storage local de desenvolvimento para vendas.`)
     }
     const rows = await listRows('vendas', { orderBy: 'data_venda desc' })
     return rows.map(rowToVenda)
@@ -1049,16 +1101,19 @@ export const vendasRepo = {
     const target = await getLanTarget()
     if (target) {
       const result = await fetchVendasFromMaster(target)
-      if (!result.ok) {
+      if (result.ok) {
+        return result.data.map(({ venda, itens }) => ({
+          ...venda,
+          itens: itens.map((item) => ({
+            ...item,
+            nome: getProductName?.(item.produtoId) ?? `Produto #${item.produtoId}`,
+          })),
+        }))
+      }
+      if (!isDevLanFallback(result)) {
         throw new Error(`Não foi possível carregar as vendas do Caixa Principal (${target}): ${result.reason}`)
       }
-      return result.data.map(({ venda, itens }) => ({
-        ...venda,
-        itens: itens.map((item) => ({
-          ...item,
-          nome: getProductName?.(item.produtoId) ?? `Produto #${item.produtoId}`,
-        })),
-      }))
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — usando storage local de desenvolvimento para vendas.`)
     }
     const [vendaRows, itemRows] = await Promise.all([
       listRows('vendas', { orderBy: 'data_venda desc' }),
@@ -1093,7 +1148,10 @@ export const vendasRepo = {
     if (target) {
       const result = await postVendaToMaster(target, payload)
       if (result.ok) return result.data
-      throw new Error(`Não foi possível registrar a venda no Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível registrar a venda no Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — registrando a venda no storage local de desenvolvimento.`)
     }
 
     const {
@@ -1163,7 +1221,10 @@ export const vendasRepo = {
     if (target) {
       const result = await voidVendaOnMaster(target, id, reason)
       if (result.ok) return result.data
-      throw new Error(`Não foi possível estornar a venda no Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível estornar a venda no Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — estornando a venda no storage local de desenvolvimento.`)
     }
     const vendaRow = await getRowById('vendas', id)
     if (!vendaRow) return null
@@ -1262,7 +1323,10 @@ export const vendasRepo = {
     if (target) {
       const result = await settleVendaOnMaster(target, id, paymentMethod)
       if (result.ok) return result.data
-      throw new Error(`Não foi possível quitar a venda no Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível quitar a venda no Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — quitando a venda no storage local de desenvolvimento.`)
     }
     const vendaRow = await getRowById('vendas', id)
     if (!vendaRow) return null
@@ -1667,7 +1731,10 @@ export const vouchersRepo = {
     if (target) {
       const result = await fetchVouchersFromMaster(target)
       if (result.ok) return result.data.map(rowToVoucher)
-      throw new Error(`Não foi possível carregar os vales-crédito do Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível carregar os vales-crédito do Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — usando storage local de desenvolvimento para vales-crédito.`)
     }
     const rows = await listRows('vales_credito', { orderBy: 'emitido_em desc' })
     return rows.map(rowToVoucher)
@@ -1686,7 +1753,10 @@ export const vouchersRepo = {
     if (target) {
       const result = await createVoucherOnMaster(target, row)
       if (result.ok) return rowToVoucher(result.data)
-      throw new Error(`Não foi possível emitir o vale-crédito no Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível emitir o vale-crédito no Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — emitindo o vale-crédito no storage local de desenvolvimento.`)
     }
     const created = await insertRow('vales_credito', row)
     return rowToVoucher(created)
@@ -1696,7 +1766,10 @@ export const vouchersRepo = {
     if (target) {
       const result = await markVoucherUsedOnMaster(target, id)
       if (result.ok) return result.data ? rowToVoucher(result.data) : null
-      throw new Error(`Não foi possível usar o vale-crédito no Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível usar o vale-crédito no Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — usando o vale-crédito no storage local de desenvolvimento.`)
     }
     const row = await updateRow('vales_credito', id, { status: 'utilizado', usado_em: new Date().toISOString().slice(0, 10) })
     return row ? rowToVoucher(row) : null
@@ -1794,7 +1867,10 @@ export const trocasLogRepo = {
     if (target) {
       const result = await fetchTrocasLogFromMaster(target)
       if (result.ok) return result.data.map(rowToTrocaLog)
-      throw new Error(`Não foi possível carregar o log de trocas do Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível carregar o log de trocas do Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — usando storage local de desenvolvimento para o log de trocas.`)
     }
     const rows = await listRows('trocas_log', { orderBy: 'criado_em desc' })
     return rows.map(rowToTrocaLog)
@@ -1811,7 +1887,10 @@ export const trocasLogRepo = {
     if (target) {
       const result = await createTrocaLogOnMaster(target, row)
       if (result.ok) return rowToTrocaLog(result.data)
-      throw new Error(`Não foi possível registrar a troca no Caixa Principal (${target}): ${result.reason}`)
+      if (!isDevLanFallback(result)) {
+        throw new Error(`Não foi possível registrar a troca no Caixa Principal (${target}): ${result.reason}`)
+      }
+      console.warn(`[dev] Mestre (${target}) inalcançável no navegador — registrando a troca no storage local de desenvolvimento.`)
     }
     const created = await insertRow('trocas_log', row)
     return rowToTrocaLog(created)

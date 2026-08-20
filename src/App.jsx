@@ -308,7 +308,7 @@ function App() {
   }
 
   return (
-    <div className="flex h-svh gap-4 bg-slate-100 p-4 text-slate-900 print:h-auto print:gap-0 print:bg-white print:p-0">
+    <div className="flex h-svh gap-3 bg-slate-100 p-3 text-slate-900 print:h-auto print:gap-0 print:bg-white print:p-0">
       <OnboardingTour />
       <Sidebar active={active} onSelect={setActive} />
 

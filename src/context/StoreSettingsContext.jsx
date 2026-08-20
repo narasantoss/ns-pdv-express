@@ -10,7 +10,7 @@ export const DEFAULT_STORE_SETTINGS = {
   receiptFooter: 'Obrigado pela preferência!',
   logoDataUrl: null,
   operationMode: 'mestre',
-  masterIp: '',
+  masterIp: '127.0.0.1',
   adminPin: '1234',
 }
 
