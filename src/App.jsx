@@ -322,6 +322,12 @@ function App() {
           />
         ) : (
           <>
+            {/* A troca de abas desmonta o PDVMain, mas a venda em andamento
+                (carrinho, desconto, cliente e observações) fica na store
+                global do Zustand — ver src/store/usePdvStore.js — e é
+                restaurada intacta ao voltar para "vendas", inclusive após um
+                F5 (sessionStorage). Por isso a renderização condicional aqui é
+                segura e não precisa manter o componente montado escondido. */}
             {active === 'vendas' && (
               <PDVMain onExit={logout} onGoToDelivery={() => setActive('delivery')} />
             )}

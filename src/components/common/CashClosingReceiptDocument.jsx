@@ -12,6 +12,7 @@ export default function CashClosingReceiptDocument({
   operatorName,
   openedAtLabel,
   closedAtLabel,
+  generatedAtLabel,
   initialCash = 0,
   cashSales = 0,
   receiptsCash = 0,
@@ -45,24 +46,30 @@ export default function CashClosingReceiptDocument({
       )}
 
       <p className="mt-1.5 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-        Comprovante de Fechamento de Caixa
+        Relatório de Fechamento de Caixa do Dia
       </p>
 
       <div className="my-2 border-t border-dashed border-slate-400" />
 
       <div className="space-y-0.5 text-[11px]">
         <div className="flex justify-between gap-2">
-          <span>Operador</span>
+          <span>Operador responsável</span>
           <span className="text-right">{operatorName}</span>
         </div>
         <div className="flex justify-between">
-          <span>Abertura</span>
+          <span>Abertura do caixa</span>
           <span className="tabular-nums">{openedAtLabel}</span>
         </div>
         <div className="flex justify-between">
-          <span>Fechamento</span>
+          <span>Fechamento do caixa</span>
           <span className="tabular-nums">{closedAtLabel}</span>
         </div>
+        {generatedAtLabel && (
+          <div className="flex justify-between">
+            <span>Emitido em</span>
+            <span className="tabular-nums">{generatedAtLabel}</span>
+          </div>
+        )}
       </div>
 
       <div className="my-2 border-t border-dashed border-slate-400" />
@@ -72,31 +79,29 @@ export default function CashClosingReceiptDocument({
       </p>
       <div className="mt-1 space-y-0.5 text-[11px]">
         <div className="flex justify-between">
-          <span>Saldo Inicial (Troco)</span>
+          <span>Fundo de Troco Inicial</span>
           <span className="tabular-nums">{formatCurrency(initialCash)}</span>
         </div>
         <div className="flex justify-between">
           <span>Vendas em Dinheiro</span>
-          <span className="tabular-nums">{formatCurrency(cashSales)}</span>
+          <span className="tabular-nums">+{formatCurrency(cashSales)}</span>
         </div>
         {receiptsCash > 0 && (
           <div className="flex justify-between">
-            <span>Recebimentos de Crediário</span>
+            <span>Recebimentos de Crediário (Dinheiro)</span>
             <span className="tabular-nums">+{formatCurrency(receiptsCash)}</span>
           </div>
         )}
-        {suprimentos > 0 && (
-          <div className="flex justify-between">
-            <span>Suprimentos</span>
-            <span className="tabular-nums">+{formatCurrency(suprimentos)}</span>
-          </div>
-        )}
+        <div className="flex justify-between">
+          <span>Suprimentos</span>
+          <span className="tabular-nums">+{formatCurrency(suprimentos)}</span>
+        </div>
         <div className="flex justify-between">
           <span>Sangrias</span>
           <span className="tabular-nums">-{formatCurrency(sangrias)}</span>
         </div>
         <div className="flex justify-between font-semibold">
-          <span>Saldo Final Esperado</span>
+          <span>Saldo Final em Caixa (Esperado)</span>
           <span className="tabular-nums">{formatCurrency(expectedCash)}</span>
         </div>
       </div>

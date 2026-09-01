@@ -123,10 +123,13 @@ ${collectAppStyles()}
   })
 }
 
-// Imprime o comprovante de fechamento de caixa isoladamente em uma nova janela,
-// no mesmo padrão da bobina térmica (80mm/58mm) usada nos cupons de venda.
+// Imprime o Relatório de Fechamento de Caixa isoladamente em uma nova janela.
+// `closingProps.paper` escolhe o layout: '58' / '80' para bobina térmica
+// não-fiscal ou 'a4' para folha inteira / PDF (mesma abordagem de
+// printOrcamentoWindow).
 export function printCashClosingWindow(closingProps) {
-  const popup = openPrintPopup('width=420,height=640')
+  const isA4 = closingProps.paper === 'a4'
+  const popup = openPrintPopup(isA4 ? 'width=900,height=1000' : 'width=420,height=640')
 
   if (!popup) {
     window.alert('Não foi possível abrir a janela de impressão. Verifique o bloqueador de pop-ups.')
@@ -134,18 +137,18 @@ export function printCashClosingWindow(closingProps) {
   }
 
   runDecoupled(() => {
-    const width = closingProps.width ?? 80
-    const markup = renderToStaticMarkup(<CashClosingReceiptDocument {...closingProps} />)
+    const width = closingProps.width ?? (isA4 ? 180 : 80)
+    const markup = renderToStaticMarkup(<CashClosingReceiptDocument {...closingProps} width={width} />)
 
     popup.document.open()
     popup.document.write(`<!doctype html>
 <html>
 <head>
 <meta charset="utf-8" />
-<title>Comprovante de Fechamento de Caixa</title>
+<title>Relatório de Fechamento de Caixa</title>
 ${collectAppStyles()}
 <style>
-  @page { size: ${width}mm auto; margin: 3mm; }
+  @page { ${isA4 ? 'size: A4; margin: 12mm;' : `size: ${width}mm auto; margin: 3mm;`} }
   html, body { background: #fff; margin: 0; }
 </style>
 </head>

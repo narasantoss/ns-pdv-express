@@ -73,6 +73,7 @@ import {
 import CashClosingModal from '../financeiro/CashClosingModal'
 import { loadComandas, persistComandas } from '../../lib/database'
 import { vendasRepo, produtosRepo } from '../../services/db'
+import { usePdvStore } from '../../store/usePdvStore'
 
 const PAYMENT_METHODS = [
   { id: 'dinheiro', label: 'Dinheiro', icon: Banknote, shortcut: '1' },
@@ -379,18 +380,27 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
   )
   const [searchTerm, setSearchTerm] = useState('')
   const [notFound, setNotFound] = useState(false)
-  const [cart, setCart] = useState([])
+  // Carrinho, desconto e cliente vinculado moram na store global do Zustand
+  // (src/store/usePdvStore.js) — assim a venda em andamento sobrevive à troca
+  // de abas do menu lateral, que desmonta este componente. Os setters da
+  // store aceitam valor ou função updater, então todo o código abaixo que já
+  // fazia `setCart(prev => ...)` / `setDiscount(...)` continua igual.
+  const cart = usePdvStore((state) => state.carrinho)
+  const setCart = usePdvStore((state) => state.setCarrinho)
+  const discount = usePdvStore((state) => state.desconto)
+  const setDiscount = usePdvStore((state) => state.setDesconto)
+  const selectedClientId = usePdvStore((state) => state.clienteSelecionado)
+  const setSelectedClientId = usePdvStore((state) => state.setClienteSelecionado)
+  const setOperadorAtual = usePdvStore((state) => state.setOperadorAtual)
   const [paymentMethod, setPaymentMethod] = useState('dinheiro')
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [amountReceived, setAmountReceived] = useState('')
   const [successMessage, setSuccessMessage] = useState(false)
   const [now, setNow] = useState(() => new Date())
   const [clientSearchTerm, setClientSearchTerm] = useState('')
-  const [selectedClientId, setSelectedClientId] = useState(null)
   const [showNewClientModal, setShowNewClientModal] = useState(false)
   const [newClientForm, setNewClientForm] = useState(EMPTY_NEW_CLIENT_FORM)
   const [newClientAttemptedSubmit, setNewClientAttemptedSubmit] = useState(false)
-  const [discount, setDiscount] = useState(null)
   const [showDiscountModal, setShowDiscountModal] = useState(false)
   const [discountDraftType, setDiscountDraftType] = useState('value')
   const [discountDraftValue, setDiscountDraftValue] = useState('')
@@ -1771,6 +1781,13 @@ export default function PDVMain({ onExit, onGoToDelivery } = {}) {
     const intervalId = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(intervalId)
   }, [])
+
+  // Mantém o operador logado espelhado na store global da venda — usado por
+  // consumidores fora do PDVMain (ex.: terminal secundário) e pelo relatório
+  // do dia no Fechamento de Caixa.
+  useEffect(() => {
+    setOperadorAtual(currentOperator?.name ?? null)
+  }, [currentOperator, setOperadorAtual])
 
   useEffect(() => {
     // Espera o catálogo de produtos carregar antes de resolver os nomes dos

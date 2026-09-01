@@ -10,6 +10,10 @@ import {
   Scale,
   Printer,
   FileText,
+  Banknote,
+  QrCode,
+  CreditCard,
+  CalendarClock,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useStoreSettings } from '../../context/StoreSettingsContext'
@@ -46,6 +50,58 @@ function sumPaymentsForMethod(vendas, methodId) {
     if (bucketForPaymentMethod(venda.formaPagamento) === methodId) total += venda.totalLiquido
   }
   return total
+}
+
+// Linhas do Relatório do Dia — quebra granular por forma de pagamento.
+// Diferente dos 4 buckets do Financeiro (data/paymentMethods.js), aqui
+// Cartão de Débito e Cartão de Crédito aparecem separados, porque é isso que
+// o operador precisa conferir contra o extrato da maquininha no fechamento.
+const DAILY_BREAKDOWN_ROWS = [
+  { id: 'dinheiro', label: 'Vendas em Dinheiro', icon: Banknote, tone: 'emerald' },
+  { id: 'pix', label: 'PIX', icon: QrCode, tone: 'sky' },
+  { id: 'cartao-debito', label: 'Cartão de Débito', icon: CreditCard, tone: 'indigo' },
+  { id: 'cartao-credito', label: 'Cartão de Crédito', icon: CreditCard, tone: 'violet' },
+  { id: 'cartao', label: 'Cartão (Maquininha / Misto)', icon: CreditCard, tone: 'indigo' },
+  { id: 'crediario', label: 'Crediário', icon: CalendarClock, tone: 'amber' },
+]
+
+/**
+ * Soma as vendas da sessão + recebimentos de crediário por forma de pagamento
+ * detalhada. Cada parcela de uma venda "Pagamento Misto" cai no bucket certo
+ * (dinheiro / pix / cartão). A linha genérica "Cartão (Maquininha / Misto)"
+ * só aparece quando tem valor — cobre o cartão do pagamento misto e pedidos
+ * de delivery cobrados na maquininha, que não distinguem débito de crédito.
+ */
+function buildDailyBreakdown(vendas, receiptMovements) {
+  const totals = {
+    dinheiro: 0,
+    pix: 0,
+    'cartao-debito': 0,
+    'cartao-credito': 0,
+    cartao: 0,
+    crediario: 0,
+  }
+
+  for (const venda of vendas) {
+    if (venda.formaPagamento === 'misto') {
+      totals.dinheiro += Number(venda.splitPayments?.dinheiro ?? 0)
+      totals.pix += Number(venda.splitPayments?.pix ?? 0)
+      totals.cartao += Number(venda.splitPayments?.cartao ?? 0)
+      continue
+    }
+    if (venda.formaPagamento in totals) {
+      totals[venda.formaPagamento] += venda.totalLiquido
+    }
+  }
+
+  for (const movement of receiptMovements) {
+    const key = movement.method in totals ? movement.method : null
+    if (key) totals[key] += movement.amount
+  }
+
+  return DAILY_BREAKDOWN_ROWS.filter((row) => row.id !== 'cartao' || totals.cartao > 0.005).map(
+    (row) => ({ ...row, amount: totals[row.id] }),
+  )
 }
 
 export default function CashClosingModal({ open, onClose }) {
@@ -113,6 +169,13 @@ export default function CashClosingModal({ open, onClose }) {
     [sessionSales, receiptMovements],
   )
   const sessionGross = useMemo(() => sessionPayments.reduce((sum, method) => sum + method.amount, 0), [sessionPayments])
+  // Quebra detalhada (débito x crédito x crediário) para o Relatório do Dia —
+  // some das mesmas vendas/recebimentos que `sessionPayments`, então o total
+  // continua igual a `sessionGross`.
+  const detailedPayments = useMemo(
+    () => buildDailyBreakdown(sessionSales, receiptMovements),
+    [sessionSales, receiptMovements],
+  )
   // Já inclui `receiptsCashTotal` (mesclado em `sessionPayments` acima), então
   // recebimentos de crediário em dinheiro compõem o Esperado em Caixa junto
   // com as vendas em dinheiro da sessão.
@@ -154,22 +217,26 @@ export default function CashClosingModal({ open, onClose }) {
       physicalCash: parseAmount(physicalCash),
       difference: cashDifference,
       differenceStatus: cashDifferenceStatus,
-      payments: sessionPayments,
+      payments: detailedPayments,
       grossTotal: sessionGross,
+      generatedAt: new Date(),
     })
     setClosed(true)
     clearMovements()
     closeCash()
   }
 
-  function printClosingReceipt() {
+  // `paper`: '58' | '80' (bobina térmica não-fiscal) | 'a4' (folha inteira / PDF).
+  function printClosingReceipt(paper = '80') {
     if (!closingSummary) return
     printCashClosingWindow({
       storeSettings: settings,
-      width: 80,
+      paper,
+      width: paper === 'a4' ? 180 : Number(paper),
       operatorName: closingSummary.operatorName,
       openedAtLabel: dateTimeFormatter.format(closingSummary.openedAt),
       closedAtLabel: dateTimeFormatter.format(closingSummary.closedAt),
+      generatedAtLabel: dateTimeFormatter.format(closingSummary.generatedAt ?? new Date()),
       initialCash: closingSummary.initialCash,
       cashSales: closingSummary.cashSales,
       receiptsCash: closingSummary.receiptsCash,
@@ -208,8 +275,11 @@ export default function CashClosingModal({ open, onClose }) {
 
         {!closed ? (
           <>
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Relatório do Dia · Totais por Forma de Pagamento
+            </p>
             <ul className="space-y-2 rounded-lg border border-slate-200 p-3 text-sm">
-              {sessionPayments.map(({ id, label, icon: Icon, amount }) => (
+              {detailedPayments.map(({ id, label, icon: Icon, amount }) => (
                 <li key={id} className="flex items-center justify-between text-slate-600">
                   <span className="flex items-center gap-2">
                     <Icon size={15} className="text-slate-400" />
@@ -219,7 +289,7 @@ export default function CashClosingModal({ open, onClose }) {
                 </li>
               ))}
               <li className="flex items-center justify-between border-t border-slate-200 pt-2 text-base font-bold text-slate-900">
-                <span>Total</span>
+                <span>Total Geral do Dia</span>
                 <span className="tabular-nums">{formatCurrency(sessionGross)}</span>
               </li>
             </ul>
@@ -263,9 +333,15 @@ export default function CashClosingModal({ open, onClose }) {
 
             <div className="mt-3 space-y-1.5 rounded-lg bg-slate-50 p-3 text-sm">
               <div className="flex items-center justify-between text-slate-600">
-                <span>Saldo Inicial (Troco)</span>
+                <span>Fundo de Troco Inicial</span>
                 <span className="tabular-nums font-medium text-slate-800">
                   {formatCurrency(openingAmount)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-slate-600">
+                <span>Vendas em Dinheiro</span>
+                <span className="tabular-nums font-medium text-slate-800">
+                  +{formatCurrency(sessionCashAmount - receiptsCashTotal)}
                 </span>
               </div>
               {receiptsCashTotal > 0 && (
@@ -274,8 +350,16 @@ export default function CashClosingModal({ open, onClose }) {
                   <span className="tabular-nums font-medium">+{formatCurrency(receiptsCashTotal)}</span>
                 </div>
               )}
+              <div className="flex items-center justify-between text-emerald-600">
+                <span>Suprimentos</span>
+                <span className="tabular-nums font-medium">+{formatCurrency(suprimentosTotal)}</span>
+              </div>
+              <div className="flex items-center justify-between text-red-600">
+                <span>Sangrias</span>
+                <span className="tabular-nums font-medium">-{formatCurrency(sangriasTotal)}</span>
+              </div>
               <div className="flex items-center justify-between border-t border-slate-200 pt-1.5 font-semibold text-slate-900">
-                <span>Esperado em Caixa (Dinheiro)</span>
+                <span>Saldo Final em Caixa (Esperado)</span>
                 <span className="tabular-nums">{formatCurrency(expectedCash)}</span>
               </div>
             </div>
@@ -351,31 +435,47 @@ export default function CashClosingModal({ open, onClose }) {
                 <p className="text-sm font-semibold text-slate-800">Caixa fechado com sucesso!</p>
               </div>
 
-              <div className="grid grid-cols-3 gap-3 rounded-lg border border-slate-200 p-3 text-sm">
-                <div>
-                  <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                    <UserCircle2 size={12} />
-                    Operador
+              <div className="rounded-lg border border-slate-200 p-3 text-sm">
+                <p className="text-center text-sm font-bold uppercase leading-tight text-slate-900">
+                  {settings?.fantasyName?.trim() || 'Minha Loja'}
+                </p>
+                {settings?.document?.trim() && (
+                  <p className="text-center text-[10px] leading-tight text-slate-500">
+                    CNPJ/CPF: {settings.document}
                   </p>
-                  <p className="mt-0.5 font-medium text-slate-800">{closingSummary.operatorName}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Abertura</p>
-                  <p className="mt-0.5 font-medium tabular-nums text-slate-800">
-                    {dateTimeFormatter.format(closingSummary.openedAt)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Fechamento</p>
-                  <p className="mt-0.5 font-medium tabular-nums text-slate-800">
-                    {dateTimeFormatter.format(closingSummary.closedAt)}
-                  </p>
+                )}
+                <p className="mt-1 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  Relatório de Fechamento de Caixa · {dateTimeFormatter.format(closingSummary.generatedAt ?? closingSummary.closedAt)}
+                </p>
+                <div className="mt-2 grid grid-cols-3 gap-3 border-t border-slate-100 pt-2">
+                  <div>
+                    <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      <UserCircle2 size={12} />
+                      Operador
+                    </p>
+                    <p className="mt-0.5 font-medium text-slate-800">{closingSummary.operatorName}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Abertura</p>
+                    <p className="mt-0.5 font-medium tabular-nums text-slate-800">
+                      {dateTimeFormatter.format(closingSummary.openedAt)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Fechamento</p>
+                    <p className="mt-0.5 font-medium tabular-nums text-slate-800">
+                      {dateTimeFormatter.format(closingSummary.closedAt)}
+                    </p>
+                  </div>
                 </div>
               </div>
 
               <div className="space-y-1.5 rounded-lg bg-slate-50 p-3 text-sm">
+                <p className="mb-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                  Movimentação da Gaveta (Dinheiro)
+                </p>
                 <div className="flex items-center justify-between text-slate-600">
-                  <span>Saldo Inicial (Troco)</span>
+                  <span>Fundo de Troco Inicial</span>
                   <span className="tabular-nums font-medium text-slate-800">
                     {formatCurrency(closingSummary.initialCash)}
                   </span>
@@ -383,7 +483,7 @@ export default function CashClosingModal({ open, onClose }) {
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Vendas em Dinheiro</span>
                   <span className="tabular-nums font-medium text-slate-800">
-                    {formatCurrency(closingSummary.cashSales)}
+                    +{formatCurrency(closingSummary.cashSales)}
                   </span>
                 </div>
                 {closingSummary.receiptsCash > 0 && (
@@ -394,14 +494,12 @@ export default function CashClosingModal({ open, onClose }) {
                     </span>
                   </div>
                 )}
-                {closingSummary.suprimentos > 0 && (
-                  <div className="flex items-center justify-between text-emerald-600">
-                    <span>Suprimentos</span>
-                    <span className="tabular-nums font-medium">
-                      +{formatCurrency(closingSummary.suprimentos)}
-                    </span>
-                  </div>
-                )}
+                <div className="flex items-center justify-between text-emerald-600">
+                  <span>Suprimentos</span>
+                  <span className="tabular-nums font-medium">
+                    +{formatCurrency(closingSummary.suprimentos)}
+                  </span>
+                </div>
                 <div className="flex items-center justify-between text-red-600">
                   <span>Sangrias Efetuadas</span>
                   <span className="tabular-nums font-medium">
@@ -409,7 +507,7 @@ export default function CashClosingModal({ open, onClose }) {
                   </span>
                 </div>
                 <div className="flex items-center justify-between border-t border-slate-200 pt-1.5 font-semibold text-slate-900">
-                  <span>Saldo Final Esperado na Gaveta</span>
+                  <span>Saldo Final em Caixa (Esperado)</span>
                   <span className="tabular-nums">{formatCurrency(closingSummary.expectedCash)}</span>
                 </div>
               </div>
@@ -482,26 +580,39 @@ export default function CashClosingModal({ open, onClose }) {
               </div>
 
               <div className="flex flex-col gap-2 border-t border-slate-100 pt-3">
-                <button
-                  type="button"
-                  onClick={printClosingReceipt}
-                  className="flex items-center justify-center gap-2 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-                >
-                  <Printer size={15} />
-                  Imprimir Comprovante de Fechamento (Bobina 80mm/58mm)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="flex items-center justify-center gap-2 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-                >
-                  <FileText size={15} />
-                  Exportar Relatório A4 / PDF
-                </button>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                  Imprimir Relatório do Dia
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => printClosingReceipt('58')}
+                    className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 py-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    <Printer size={14} />
+                    Térmica 58mm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => printClosingReceipt('80')}
+                    className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 py-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    <Printer size={14} />
+                    Térmica 80mm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => printClosingReceipt('a4')}
+                    className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 py-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    <FileText size={14} />
+                    A4 / PDF
+                  </button>
+                </div>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+                  className="mt-1 rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
                 >
                   Fechar
                 </button>
