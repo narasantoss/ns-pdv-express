@@ -114,11 +114,13 @@ export default function CashClosingModal({ open, onClose }) {
   const [physicalCash, setPhysicalCash] = useState('')
   const [closingSummary, setClosingSummary] = useState(null)
   const [sessionSales, setSessionSales] = useState([])
+  const [printOnClose, setPrintOnClose] = useState(true)
 
   useEffect(() => {
     if (open) {
       setClosed(false)
       setPhysicalCash('')
+      setPrintOnClose(true)
     }
   }, [open])
 
@@ -203,11 +205,15 @@ export default function CashClosingModal({ open, onClose }) {
     })
   }
 
-  function executeClose() {
-    setClosingSummary({
+  // Monta o snapshot do fechamento a partir do estado atual do modal. Usado
+  // tanto ao confirmar o fechamento quanto pelo botão "Imprimir Resumo Agora"
+  // (que roda antes do caixa ser finalizado).
+  function buildClosingSummary() {
+    const now = new Date()
+    return {
       operatorName: currentOperator?.name ?? 'Operador',
       openedAt,
-      closedAt: new Date(),
+      closedAt: now,
       initialCash: openingAmount,
       cashSales: sessionCashAmount - receiptsCashTotal,
       receiptsCash: receiptsCashTotal,
@@ -219,35 +225,43 @@ export default function CashClosingModal({ open, onClose }) {
       differenceStatus: cashDifferenceStatus,
       payments: detailedPayments,
       grossTotal: sessionGross,
-      generatedAt: new Date(),
-    })
+      generatedAt: now,
+    }
+  }
+
+  function executeClose() {
+    const summary = buildClosingSummary()
+    setClosingSummary(summary)
     setClosed(true)
     clearMovements()
     closeCash()
+    // O estado `closingSummary` só é aplicado no próximo render, então
+    // imprimimos direto do snapshot recém-montado.
+    if (printOnClose) printClosingReceipt('80', summary)
   }
 
   // `paper`: '58' | '80' (bobina térmica não-fiscal) | 'a4' (folha inteira / PDF).
-  function printClosingReceipt(paper = '80') {
-    if (!closingSummary) return
+  function printClosingReceipt(paper = '80', summary = closingSummary) {
+    if (!summary) return
     printCashClosingWindow({
       storeSettings: settings,
       paper,
       width: paper === 'a4' ? 180 : Number(paper),
-      operatorName: closingSummary.operatorName,
-      openedAtLabel: dateTimeFormatter.format(closingSummary.openedAt),
-      closedAtLabel: dateTimeFormatter.format(closingSummary.closedAt),
-      generatedAtLabel: dateTimeFormatter.format(closingSummary.generatedAt ?? new Date()),
-      initialCash: closingSummary.initialCash,
-      cashSales: closingSummary.cashSales,
-      receiptsCash: closingSummary.receiptsCash,
-      suprimentos: closingSummary.suprimentos,
-      sangrias: closingSummary.sangrias,
-      expectedCash: closingSummary.expectedCash,
-      physicalCash: closingSummary.physicalCash,
-      difference: closingSummary.difference,
-      differenceStatus: closingSummary.differenceStatus,
-      payments: closingSummary.payments,
-      grossTotal: closingSummary.grossTotal,
+      operatorName: summary.operatorName,
+      openedAtLabel: dateTimeFormatter.format(summary.openedAt),
+      closedAtLabel: dateTimeFormatter.format(summary.closedAt),
+      generatedAtLabel: dateTimeFormatter.format(summary.generatedAt ?? new Date()),
+      initialCash: summary.initialCash,
+      cashSales: summary.cashSales,
+      receiptsCash: summary.receiptsCash,
+      suprimentos: summary.suprimentos,
+      sangrias: summary.sangrias,
+      expectedCash: summary.expectedCash,
+      physicalCash: summary.physicalCash,
+      difference: summary.difference,
+      differenceStatus: summary.differenceStatus,
+      payments: summary.payments,
+      grossTotal: summary.grossTotal,
     })
   }
 
@@ -419,9 +433,28 @@ export default function CashClosingModal({ open, onClose }) {
 
             <button
               type="button"
+              onClick={() => printClosingReceipt('80', buildClosingSummary())}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 py-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              <Printer size={14} />
+              Imprimir Resumo Agora
+            </button>
+
+            <label className="mt-3 flex items-start gap-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={printOnClose}
+                onChange={(event) => setPrintOnClose(event.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-2 focus:ring-slate-500/30"
+              />
+              <span>Imprimir resumo diário do caixa ao fechar</span>
+            </label>
+
+            <button
+              type="button"
               onClick={confirmClose}
               disabled={!hasPhysicalCash}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               <Lock size={16} />
               Confirmar Fechamento
