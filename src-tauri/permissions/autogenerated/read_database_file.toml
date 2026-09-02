@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-read-database-file"
+description = "Enables the read_database_file command without any pre-configured scope."
+commands.allow = ["read_database_file"]
+
+[[permission]]
+identifier = "deny-read-database-file"
+description = "Denies the read_database_file command without any pre-configured scope."
+commands.deny = ["read_database_file"]

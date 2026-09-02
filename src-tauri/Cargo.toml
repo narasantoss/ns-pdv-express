@@ -1,0 +1,48 @@
+[package]
+# Nome do pacote = nome do binário principal (ns-pdv-express.exe), gerado
+# automaticamente por `src/main.rs` — é assim que o instalador NSIS identifica
+# qual dos binários deste crate é a "aplicação principal" a empacotar/atalhar
+# na Área de Trabalho, distinguindo-o dos utilitários internos em src/bin/
+# (gerar_chaves, gerar_licenca), que nunca são incluídos no instalador.
+name = "ns-pdv-express"
+default-run = "ns-pdv-express"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.77.2"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.3", features = [] }
+tauri-plugin-log = "2"
+tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+# Etapa 5: Módulo de Licenciamento (HWID + RSA offline) — ver src/licensing.rs.
+# feature "sha2" do crate rsa + "oid" do crate sha2 são exigidas para
+# Pkcs1v15Sign::new::<Sha256>() (precisa de Sha256: AssociatedOid).
+rsa = { version = "0.9", features = ["pem", "sha2"] }
+sha2 = { version = "0.10", features = ["oid"] }
+rand = "0.8"
+base64 = "0.22"
+# Servidor HTTP Local (Rede Local Multi-PC — Mestre/Balcão) — ver src/server.rs.
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "macros", "time"] }
+tower-http = { version = "0.6", features = ["cors"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+chrono = { version = "0.4", features = ["clock"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"

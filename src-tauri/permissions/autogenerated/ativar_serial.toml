@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ativar-serial"
+description = "Enables the ativar_serial command without any pre-configured scope."
+commands.allow = ["ativar_serial"]
+
+[[permission]]
+identifier = "deny-ativar-serial"
+description = "Denies the ativar_serial command without any pre-configured scope."
+commands.deny = ["ativar_serial"]
